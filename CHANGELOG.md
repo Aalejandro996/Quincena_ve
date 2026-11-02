@@ -8,6 +8,12 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## Cargas visibles y pagos mixtos (web)
+- Pantalla de carga con Quinci y barra animada al abrir la app (ya viene en el HTML, se ve aunque el servidor esté despertando), con mensajes de lo que está pasando.
+- Barra fina arriba mientras hay peticiones al servidor; los botones de los formularios muestran un indicador mientras guardan.
+- Portada y panel de administración: barra de carga al abrir la app o cambiar de pestaña.
+- Pagos mixtos: un gasto se puede dividir en varios métodos (pago móvil, efectivo, transferencia, tarjeta, punto, Zelle, Binance), cada uno en su moneda y cuenta; en Movimientos se ve como un solo gasto con sus métodos.
+
 ## Android: todas las mejoras nuevas
 - Quinci en Inicio y sus reacciones; tutorial de bienvenida (también en Más › Ver el tutorial).
 - Ver montos en $ BCV, USDT, € o Bs.; gastos con fecha; pagos fijos manuales o automáticos y compromisos sin duplicar; plan de pagos con orden, monto por quincena, comparación y programar el mes.

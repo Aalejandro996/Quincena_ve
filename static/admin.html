@@ -47,6 +47,9 @@ label{display:block;font-weight:600;font-size:13px;color:var(--mut)}label>input,
 dialog{border:0;border-radius:20px;padding:0;max-width:720px;width:calc(100% - 24px);background:var(--card);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.35)}dialog .in{padding:20px}
 .bar{height:8px;border-radius:4px;background:var(--gs);overflow:hidden}.bar i{display:block;height:100%;background:var(--g)}
+#netbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:50;opacity:0;transition:opacity .2s;background:linear-gradient(90deg,transparent,var(--g),transparent);background-size:50% 100%;background-repeat:no-repeat}
+#netbar.on{opacity:1;animation:nb 1s linear infinite}@keyframes nb{0%{background-position:-50% 0}100%{background-position:150% 0}}
+.ld{width:160px;height:6px;border-radius:3px;background:var(--gs);overflow:hidden;margin:60px auto 10px}.ld i{display:block;height:100%;width:40%;background:var(--g);border-radius:3px;animation:lb 1.2s ease-in-out infinite}@keyframes lb{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
 </style>
 </head>
 <body>
@@ -55,8 +58,8 @@ dialog::backdrop{background:rgba(0,0,0,.35)}dialog .in{padding:20px}
   <span class="pill">Administración</span>
   <nav class="tabs" id="tabs"></nav>
 </div></header>
-<main id="main"><p class="mut">Cargando…</p></main>
-<div id="toast"></div>
+<main id="main"><div class="ld"><i></i></div><p class="mut" style="text-align:center">Cargando…</p></main>
+<div id="toast"></div><div id="netbar" aria-hidden="true"></div>
 <dialog id="dlg"><div class="in" id="dlgin"></div></dialog>
 <script>
 const S={tab:'resumen',csrf:null,me:null,users:null,payments:null,settings:null,binance:null};
@@ -66,7 +69,8 @@ const money=(n,d=2)=>Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:
 const day=s=>s?new Date(s).toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
 const bytes=b=>b==null?'—':b>1e9?money(b/1e9,1)+' GB':b>1e6?money(b/1e6,1)+' MB':money(b/1e3,0)+' KB';
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),3200)}
-async function api(url,o={}){const h={'Content-Type':'application/json'};if(S.csrf&&o.method&&o.method!=='GET')h['X-CSRF-Token']=S.csrf;
+async function api(url,o={}){const b=document.getElementById('netbar');S.n=(S.n||0)+1;b&&b.classList.add('on');try{return await api0(url,o)}finally{S.n--;if(!S.n&&b)b.classList.remove('on')}}
+async function api0(url,o={}){const h={'Content-Type':'application/json'};if(S.csrf&&o.method&&o.method!=='GET')h['X-CSRF-Token']=S.csrf;
   const r=await fetch(url,{credentials:'same-origin',...o,headers:h});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.error||'Error ('+r.status+')');return p}
 const TABS=[['resumen','Resumen'],['sugerencias','Sugerencias'],['usuarios','Usuarios'],['cobros','Cobros Plus'],['nueva','Nueva factura'],['ajustes','Facturación']];
 function tabs(){$('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}${k==='sugerencias'&&S.newSug?` <span class="pill plus">${S.newSug}</span>`:''}</button>`).join('')}

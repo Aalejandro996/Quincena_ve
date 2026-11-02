@@ -97,6 +97,21 @@ try:
         check("al editar se ve la fecha guardada", page.input_value("#f-sheet [name=date]") == old)
         page.click("#x"); page.wait_for_timeout(200)
 
+        print("== Pago mixto ==")
+        page.click("nav [data-tab=inicio]"); page.wait_for_timeout(300)
+        page.click("[data-sheet=gasto] >> nth=0"); page.click("#mixon"); page.wait_for_timeout(200)
+        check("al dividir el pago se esconde el monto único", page.locator("#f-sheet [name=amount]").is_hidden() and page.locator("#mix").is_visible())
+        page.select_option("#f-sheet [name=mm0]", "pago_movil"); page.fill("#f-sheet [name=ma0]", "500"); page.select_option("#f-sheet [name=mc0]", "BS")
+        page.select_option("#f-sheet [name=mm1]", "efectivo"); page.fill("#f-sheet [name=ma1]", "10"); page.select_option("#f-sheet [name=mc1]", "USD")
+        check("muestra el total: 500 Bs (5 $) + 10 $ = 15 $", "Total: $ 15,00" in text(page), text(page)[-300:])
+        page.fill("#f-sheet [name=description]", "Mercado mixto"); save(page)
+        ex = [x for x in state(page)["expenses"] if x.get("description") == "Mercado mixto"]
+        check("se guardan dos partes del mismo gasto", len(ex) == 2 and len({x["groupId"] for x in ex}) == 1 and {x["method"] for x in ex} == {"pago_movil", "efectivo"}, ex)
+        page.click("nav [data-tab=movimientos]"); page.wait_for_timeout(300)
+        t = text(page)
+        check("en Movimientos se ve como un solo gasto con sus métodos", "pagado con 2 métodos" in t and "Pago móvil · Bs. 500,00" in t and "Efectivo · $ 10,00" in t, t[:600])
+        page.click("nav [data-tab=inicio]"); page.wait_for_timeout(300)
+
         print("== Ver montos en $, USDT, € o Bs. ==")
         page.click("nav [data-tab=inicio]"); page.wait_for_timeout(300)
         labels = page.locator(".head .seg button").all_inner_texts()

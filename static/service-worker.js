@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quincena-shell-v24';
+const CACHE_NAME = 'quincena-shell-v25';
 const SHELL = ['/app', '/static/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png', '/static/icons/icon.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));

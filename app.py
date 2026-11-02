@@ -150,6 +150,7 @@ DEFAULT_SHARED_DATA = {
 }
 
 BIZ_RATE_KINDS = ("bcv_usd", "bcv_eur", "usdt")
+EXPENSE_METHODS = {"banco", "efectivo", "pago_movil", "tarjeta", "punto", "zelle", "binance"}
 # Tipo de negocio: los de servicios (profesionales, salud, oficios, clases, creativos) hablan de cobros, servicios y clientes.
 BIZ_TYPES = ("comercio", "comida", "belleza", "online", "profesional", "salud", "tecnico", "educacion", "creativo", "otro")
 BIZ_PROFESSIONS = ("abogado", "contador", "administrador", "consultor", "arquitecto", "otro")
@@ -715,7 +716,7 @@ def normalize_shared_data(value) -> dict:
             # Keep the existing app's record fields, but discard nested values / very long payloads.
             clean = {}
             for field, field_value in row.items():
-                if field not in {"id", "amount", "paid", "currency", "category", "description", "method", "bank", "date", "type", "entity", "minPayment", "cutDate", "payBefore", "installments", "invoice", "interestRate", "interestPeriod", "interestKnown", "rateType", "rateUsed", "bcvRate", "marketRate", "accountId"}:
+                if field not in {"id", "amount", "paid", "currency", "category", "description", "method", "bank", "date", "type", "entity", "minPayment", "cutDate", "payBefore", "installments", "invoice", "interestRate", "interestPeriod", "interestKnown", "rateType", "rateUsed", "bcvRate", "marketRate", "accountId", "groupId"}:
                     continue
                 if isinstance(field_value, (str, int, float, bool)) or field_value is None:
                     if isinstance(field_value, str):
@@ -740,7 +741,12 @@ def normalize_shared_data(value) -> dict:
                 clean["category"] = row.get("category") if row.get("category") in {"comida", "transporte", "fijo", "hormiga", "salud", "hogar", "ocio", "educacion", "deudas"} else "fijo"
                 clean["description"] = str(row.get("description") or "Gasto")[:250]
                 clean["bank"] = str(row.get("bank") or "")[:120]
-                clean["method"] = row.get("method") if row.get("method") in {"banco", "efectivo", "pago_movil"} else "banco"
+                clean["method"] = row.get("method") if row.get("method") in EXPENSE_METHODS else "banco"
+                # Pago mixto: las partes de un mismo gasto pagado con varios métodos comparten groupId.
+                group_id = str(row.get("groupId") or "")
+                clean.pop("groupId", None)
+                if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", group_id):
+                    clean["groupId"] = group_id
                 # "Las tres tasas": a qué tasa se consiguieron los bolívares de este gasto.
                 for rate_field in ("rateUsed", "bcvRate", "marketRate"):
                     clean.pop(rate_field, None)

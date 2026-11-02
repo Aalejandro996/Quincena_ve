@@ -177,9 +177,12 @@ footer{border-top:1px solid var(--line);padding:36px 0 48px;color:var(--mut);fon
 @media(max-width:959px){.navcta .biz{display:none}}
 @media(max-width:520px){.navcta .btn.o{display:none}.cmp th,.cmp td{padding:12px 12px;font-size:15px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.js .rv{opacity:1;transform:none;transition:none}.js .fill{--p:100%}.js .bar i{transform:none}.btn,.card,.pick,.tile{transition:none}.phone{transform:none!important}}
+#gobar{position:fixed;top:0;left:0;height:3px;width:0;z-index:100;background:linear-gradient(90deg,#12936A,#0B6B4D);box-shadow:0 0 8px rgba(18,147,106,.6);transition:width 6s cubic-bezier(.1,.7,.1,1),opacity .3s}
+#gobar.on{width:85%}.js .loading .btn[href^="/app"]{pointer-events:none}
 </style>
 </head>
 <body>
+<div id="gobar" aria-hidden="true"></div>
 <header>
   <div class="wrap nav">
     <a class="brand" href="/" aria-label="Quincena VE, inicio"><img src="/static/icons/icon-192.png" alt="" width="32" height="32">Quincena VE 🇻🇪</a>
@@ -428,6 +431,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 48px;color:var(--mut);fon
   addEventListener('scroll',function(){if(!ticking){ticking=true;requestAnimationFrame(tick)}},{passive:true});
   addEventListener('resize',tick);setTimeout(tick,60);
 })();
+// Al tocar un botón que abre la app, una barra arriba avisa que está cargando (la app puede tardar si el servidor estaba dormido).
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href^="/app"],a[href^="/descargar"]');if(!a||e.metaKey||e.ctrlKey)return;var b=document.getElementById('gobar');if(b){b.style.opacity='1';b.classList.add('on')}});
+addEventListener('pageshow',function(){var b=document.getElementById('gobar');if(b){b.classList.remove('on');b.style.opacity='0'}});
 </script>
 </body>
 </html>
