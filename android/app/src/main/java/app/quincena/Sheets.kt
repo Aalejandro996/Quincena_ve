@@ -105,19 +105,61 @@ fun GastoForm(st: AppState, id: String?) {
     var rateOther by remember { mutableStateOf(if (e?.str("rateType") == "otra") inputMoney(e?.num("rateUsed")) else "") }
     var acc by remember { mutableStateOf(e?.str("accountId") ?: st.repo.pref("last_acc")?.takeIf { accById(st.repo.data, it) != null } ?: "") }
     val origDay = e?.let { localDay(it) }?.toString() ?: ""
+    // Pago mixto (solo al crear): partes con método, monto, moneda y cuenta.
+    var mixed by remember { mutableStateOf(false) }
+    val mm = remember { mutableStateListOf("pago_movil", "efectivo", "banco") }
+    val ma = remember { mutableStateListOf("", "", "") }
+    val mc = remember { mutableStateListOf("BS", "USD", "USD") }
+    val macc = remember { mutableStateListOf("", "", "") }
     var day by remember { mutableStateOf(origDay.ifEmpty { LocalDate.now().toString() }) }
     SheetTitle(if (e == null) "Nuevo gasto" else "Editar gasto")
-    MoneyField("Monto", amount) { amount = it }
-    CurrencySelect(cur) { cur = it }
-    if (cur == "BS") RatePicker(st.repo.data, rateType, { rateType = it }, rateOther, { rateOther = it })
+    if (!mixed) {
+        MoneyField("Monto", amount) { amount = it }
+        CurrencySelect(cur) { cur = it }
+        if (cur == "BS") RatePicker(st.repo.data, rateType, { rateType = it }, rateOther, { rateOther = it })
+    }
+    if (e == null) Link(if (mixed) "Pagué con un solo método" else "¿Pagaste con varios métodos? Divide el pago", { mixed = !mixed })
+    if (mixed) Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 2.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        B("¿Cómo pagaste?")
+        Mut("Ej.: parte por pago móvil y parte en efectivo en dólares. Deja vacías las filas que no uses.")
+        (0..2).forEach { j ->
+            Select("Método ${j + 1}", EXP_METHODS.entries.map { it.key to it.value }, mm[j]) { mm[j] = it }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) { MoneyField("Monto", ma[j]) { ma[j] = it } }
+                Box(Modifier.weight(1f)) { CurrencySelect(mc[j]) { mc[j] = it } }
+            }
+            if (st.repo.data.arr("accounts").any { it.bool("archived") != true }) AccSelect(st, macc[j], "Cuenta (opcional)") { macc[j] = it }
+        }
+        val tot = (0..2).sumOf { j -> parseMoney(ma[j])?.takeIf { it > 0 }?.let { usdOf(st.repo.data, it, mc[j]) } ?: 0.0 }
+        B("Total: ${st.fmt.show(tot)}")
+    }
     DateField("Fecha", day, { day = it })
     CategoryChips(cat) { cat = it }
     AccSelect(st, acc) { acc = it }
     Field(if (e == null) "Nota (opcional)" else "Nota", note, { note = it })
     if (e != null) OutlineDanger("Eliminar este gasto") { st.close(); st.act("Eliminado", undo = true) { it.removeRow("expenses", e.id) } }
     Footer(st, {
-        val a = pos(amount) ?: return@Footer st.badAmount()
         val chosen = dateOf(day) ?: LocalDate.now()
+        if (mixed) {
+            val parts = (0..2).mapNotNull { j -> parseMoney(ma[j])?.takeIf { it > 0 }?.let { j to it } }
+            if (parts.size < 2) return@Footer st.toast("Escribe al menos dos montos para dividir el pago.")
+            if (chosen.isAfter(LocalDate.now())) return@Footer st.toast("La fecha no puede ser futura.")
+            val iso = if (chosen == LocalDate.now()) nowIso() else chosen.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
+            val gid = newId()
+            st.repo.setPref("last_cat", cat)
+            st.close()
+            st.act("Gasto registrado en ${parts.size} pagos") { m ->
+                parts.forEachIndexed { i, (j, a) ->
+                    var rf = rateFields(m.data(), mc[j], "bcv", "")
+                    if (chosen != LocalDate.now()) rf = dayRates(m.data(), chosen.toString(), rf)
+                    m.addFirst("expenses", row("id" to "${gid}_p$i", "groupId" to gid, "amount" to a, "currency" to mc[j], "category" to cat, "description" to note.trim(),
+                        "method" to mm[j], "bank" to "", "date" to iso, "accountId" to macc[j].ifEmpty { null }).plusFields(*rf))
+                }
+            }
+            quinciAfterGasto(st, cat)
+            return@Footer
+        }
+        val a = pos(amount) ?: return@Footer st.badAmount()
         if (chosen.isAfter(LocalDate.now())) return@Footer st.toast("La fecha no puede ser futura.")
         // Hoy guarda la hora real; otro día, el mediodía de ese día.
         val iso = if (chosen == LocalDate.now()) nowIso() else chosen.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
@@ -142,6 +184,10 @@ fun GastoForm(st: AppState, id: String?) {
         if (e == null) quinciAfterGasto(st, cat)
     })
 }
+
+/** Métodos de pago de un gasto (pago mixto), igual que la web. */
+val EXP_METHODS = linkedMapOf("pago_movil" to "Pago móvil", "efectivo" to "Efectivo", "banco" to "Transferencia", "tarjeta" to "Tarjeta",
+    "punto" to "Punto de venta", "zelle" to "Zelle", "binance" to "Binance")
 
 /** "¿A qué tasa conseguiste esos bolívares?" — BCV, USDT u otra. */
 @Composable

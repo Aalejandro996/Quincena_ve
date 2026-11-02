@@ -328,7 +328,20 @@ fun GastosView(st: AppState) {
                 B(day?.let { dayLabel(it) } ?: "Sin fecha")
                 Mut(f.show(items.sumOf { usdOf(d, it.num("amount"), it.str("currency")) }))
             }
-            Items(items, "") { e ->
+            // Pago mixto: las partes con el mismo groupId se muestran como un solo gasto con sus métodos.
+            val rows = items.groupBy { it.str("groupId") ?: it.id }.values.toList()
+            Items(rows, "") { parts ->
+                if (parts.size > 1) {
+                    val e0 = parts.first()
+                    Column(Modifier.weight(1f)) {
+                        B(e0.str("description")?.takeIf { it.isNotBlank() } ?: CATS[e0.str("category")] ?: "Gasto")
+                        Mut("${CATS[e0.str("category")] ?: "Otros"} · pagado con ${parts.size} métodos")
+                        Chips { parts.forEach { pt -> Chip("${EXP_METHODS[pt.str("method")] ?: "Otro"} · ${f.orig(pt.num("amount"), pt.str("currency"))}", false) { st.open("editar", pt.id) } } }
+                    }
+                    Amt(f.show(parts.sumOf { usdOf(d, it.num("amount"), it.str("currency")) }))
+                    return@Items
+                }
+                val e = parts.first()
                 Column(Modifier.weight(1f)) {
                     B(e.str("description")?.takeIf { it.isNotBlank() } ?: CATS[e.str("category")] ?: "Gasto")
                     val rt = e.str("rateType")

@@ -18,6 +18,9 @@ class Offline : Exception()
 /** Se enciende cuando el servidor exige una versión más nueva de la app (respuesta 426): se muestra la pantalla de actualizar. */
 object UpdateGate { var required by mutableStateOf(false) }
 
+/** Peticiones en curso al servidor: mientras haya alguna se muestra la barra de carga arriba. */
+object Net { var busy by mutableStateOf(0) }
+
 /** Cliente del servidor actual: mismas rutas que la web, con token en vez de cookie. */
 class Api(private val store: SecureStore) {
     private val http = OkHttpClient()
@@ -26,7 +29,12 @@ class Api(private val store: SecureStore) {
     var token: String? = store.get("token")
         set(value) { field = value; store.put("token", value) }
 
-    suspend fun call(method: String, path: String, body: JsonObject? = null): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun call(method: String, path: String, body: JsonObject? = null): JsonObject {
+        withContext(Dispatchers.Main) { Net.busy++ }
+        try { return send(method, path, body) } finally { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { Net.busy-- } }
+    }
+
+    private suspend fun send(method: String, path: String, body: JsonObject?): JsonObject = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(BuildConfig.API_BASE + path)
             .method(method, if (method == "GET") null else (body ?: buildJsonObject { }).toString().toRequestBody(jsonType))
             .header("X-App-Version", BuildConfig.VERSION_CODE.toString())

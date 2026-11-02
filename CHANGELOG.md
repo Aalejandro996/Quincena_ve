@@ -8,6 +8,10 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## Android: cargas visibles y pagos mixtos
+- Barra fina arriba mientras la app habla con el servidor; los botones de entrar, crear cuenta y cambiar clave muestran una ruedita mientras trabajan.
+- Pagos mixtos al anotar un gasto: hasta 3 métodos con su monto, moneda y cuenta; en Movimientos se ve como un solo gasto con sus métodos.
+
 ## Cargas visibles y pagos mixtos (web)
 - Pantalla de carga con Quinci y barra animada al abrir la app (ya viene en el HTML, se ve aunque el servidor esté despertando), con mensajes de lo que está pasando.
 - Barra fina arriba mientras hay peticiones al servidor; los botones de los formularios muestran un indicador mientras guardan.

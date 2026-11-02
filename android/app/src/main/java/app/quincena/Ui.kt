@@ -102,6 +102,15 @@ fun Modifier.glass(shape: Shape, elevation: Dp = 10.dp, fill: Color = glassFill)
         .border(1.dp, glassEdge, shape)
 }
 
+/** Barra fina arriba mientras hay peticiones al servidor (aparece si tardan más de 250 ms). */
+@Composable
+fun NetBar(modifier: Modifier = Modifier) {
+    val busy = Net.busy > 0
+    var show by remember { mutableStateOf(false) }
+    LaunchedEffect(busy) { if (busy) { kotlinx.coroutines.delay(250); show = true } else show = false }
+    if (show) LinearProgressIndicator(modifier.fillMaxWidth().statusBarsPadding().height(3.dp), color = pal.g, trackColor = Color.Transparent)
+}
+
 /** Fondo de la app: el color de siempre con manchas de luz verde y menta, para que el vidrio se note. */
 @Composable
 fun GlassBackground(modifier: Modifier = Modifier) {
@@ -155,7 +164,7 @@ fun QCard(modifier: Modifier = Modifier, bg: Color = pal.card, border: Boolean =
 @Composable
 fun Btn(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier, small: Boolean = false, outline: Boolean = false,
-    color: Color = pal.g, enabled: Boolean = true, full: Boolean = !small,
+    color: Color = pal.g, enabled: Boolean = true, full: Boolean = !small, loading: Boolean = false,
 ) {
     val shape = CircleShape
     Box(
@@ -169,7 +178,9 @@ fun Btn(
             .padding(horizontal = if (small) 14.dp else 22.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(loc(text), color = (if (outline) color else Color.White).copy(alpha = if (enabled) 1f else .6f),
+        // Mientras guarda o se conecta, el botón muestra una ruedita en vez del texto.
+        if (loading) CircularProgressIndicator(Modifier.size(if (small) 18.dp else 22.dp), color = if (outline) color else Color.White, strokeWidth = 2.5.dp)
+        else Text(loc(text), color = (if (outline) color else Color.White).copy(alpha = if (enabled) 1f else .6f),
             fontWeight = FontWeight.SemiBold, fontSize = if (small) 14.sp else 16.sp, maxLines = 1)
     }
 }

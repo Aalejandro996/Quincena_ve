@@ -130,15 +130,15 @@ fun AuthScreen(st: AppState) {
                             if (mode == "negocio") { st.tab = "negocio"; st.bizSub = "hoy" }
                         }
                     }
-                }, enabled = !busy)
+                }, enabled = !busy, loading = busy)
                 "olvide" -> Btn("Enviarme el enlace", {
                     if (email.isBlank()) error = "Escribe tu correo."
                     else submit {
                         st.repo.forgot(email); mode = "login"
                         st.toast("Si el correo existe, te enviamos un enlace. Ábrelo en este teléfono para elegir tu contraseña.")
                     }
-                }, enabled = !busy)
-                else -> Btn("Entrar", { submit { st.repo.login(user, pass); pass = "" } }, enabled = !busy && user.isNotBlank() && pass.isNotEmpty())
+                }, enabled = !busy, loading = busy)
+                else -> Btn("Entrar", { submit { st.repo.login(user, pass); pass = "" } }, enabled = !busy && user.isNotBlank() && pass.isNotEmpty(), loading = busy)
             }
             Column(horizontalAlignment = Alignment.Start) {
                 if (mode == "login") {
@@ -192,7 +192,7 @@ fun ResetScreen(st: AppState, token: String, onDone: () -> Unit) {
                         }
                     }
                 }
-            }, enabled = !busy)
+            }, enabled = !busy, loading = busy)
             Link("Cancelar", onDone)
         }
     }

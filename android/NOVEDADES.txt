@@ -1,1 +1,1 @@
-Nuevo: Quinci, tu mascota que te avisa cómo vas; tutorial de bienvenida; ver montos en $, USDT, € o Bs.; gastos con fecha; pagos fijos sin duplicar; plan de deudas mejorado; Mi Negocio para profesionales (abogados, contadores y más) y enviar sugerencias.
+Nuevo: barra de carga y botones que muestran cuando están guardando o conectando, y pagos mixtos: divide un gasto entre pago móvil, efectivo, Zelle y más.

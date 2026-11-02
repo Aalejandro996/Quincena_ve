@@ -222,6 +222,7 @@ fun App(
                 else -> Main(st, resumes, shared, onShared, startAction, onStartAction)
             }
             if (repo.loggedIn && !repo.seller) QuinciPopHost(st, Modifier.align(Alignment.BottomCenter))
+            NetBar(Modifier.align(Alignment.TopCenter))
             SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 150.dp, start = 16.dp, end = 16.dp)) {
                 Snackbar(it, shape = RoundedCornerShape(14.dp), containerColor = p.ink, contentColor = p.bg, actionColor = p.g)
             }
