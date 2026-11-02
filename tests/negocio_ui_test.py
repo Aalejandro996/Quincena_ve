@@ -66,6 +66,8 @@ try:
         page.fill("input[name=username]", "ana"); page.fill("input[name=email]", "ana@x.com"); page.fill("input[name=password]", "Zorro-Plata-55231x")
         page.check("input[name=accept]"); page.get_by_role("button", name="Crear mi cuenta").click()
         page.wait_for_selector("nav [data-tab]", timeout=15000); page.wait_for_timeout(900)
+        if page.locator("[data-tskip]").count():
+            page.click("[data-tskip]"); page.wait_for_timeout(500)  # el tutorial de bienvenida se prueba en tour_ui_test.py
         for t in ("Acepto", "Aceptar"):
             if page.get_by_role("button", name=t).count():
                 page.get_by_role("button", name=t).first.click(); page.wait_for_timeout(400)
@@ -134,6 +136,8 @@ try:
         ap.goto("/app"); ap.wait_for_timeout(800)
         ap.fill("input[name=username]", "admin"); ap.fill("input[name=password]", "Zeta-Roble-9182x"); ap.keyboard.press("Enter")
         ap.wait_for_selector("nav [data-tab]"); ap.wait_for_timeout(600)
+        if ap.locator("[data-tskip]").count():
+            ap.click("[data-tskip]"); ap.wait_for_timeout(400)
         for t in ("Acepto", "Aceptar"):
             if ap.get_by_role("button", name=t).count():
                 ap.get_by_role("button", name=t).first.click(); ap.wait_for_timeout(400)
@@ -195,13 +199,15 @@ try:
         nctx.add_init_script("try{localStorage.setItem('qck','1');localStorage.setItem('qapk','1')}catch(e){}")
         npg = nctx.new_page(); npg.on("pageerror", lambda e: errors.append(str(e))); npg.route("**/api/rate*", fake_rate)
         npg.goto("/"); npg.wait_for_timeout(400)
-        check("la presentación tiene la sección Para tu negocio", "Quincena VE para tu negocio" in text(npg))
+        check("la presentación tiene la sección Para tu negocio", "Tu negocio, en $ y en Bs." in text(npg) and "abogados" in text(npg).lower())
         npg.click("a[href='/app#negocio'] >> nth=0"); npg.wait_for_selector("[name=business_name]", timeout=10000)
         check("el botón abre 'Crea la cuenta de tu negocio'", "Crea la cuenta de tu negocio" in text(npg))
         npg.fill("[name=business_name]", "Panadería Luis"); npg.fill("input[name=username]", "luis"); npg.fill("input[name=email]", "luis@x.com")
         npg.fill("input[name=password]", "Zorro-Plata-55231x"); npg.check("input[name=accept]")
         npg.get_by_role("button", name="Crear la cuenta del negocio").click()
         npg.wait_for_selector("nav [data-tab=negocio]", timeout=15000); npg.wait_for_timeout(600)
+        if npg.locator("[data-tskip]").count():
+            npg.click("[data-tskip]"); npg.wait_for_timeout(400)
         check("entra directo a la pestaña Negocio con su nombre", "Panadería Luis" in text(npg) and "Vendiste hoy" in text(npg), text(npg)[:300])
         npg.click("[data-biz=conf] >> nth=0"); npg.wait_for_timeout(200)
         check("la configuración ofrece BCV dólar, BCV euro y USDT con su valor", all(x in text(npg) for x in ("BCV euro · Bs. 110,00", "USDT · Bs. 120,00", "BCV dólar · Bs. 100,00")), text(npg)[:600])

@@ -70,6 +70,8 @@ try:
         page.fill("input[name=username]", "ana"); page.fill("input[name=email]", "ana@x.com"); page.fill("input[name=password]", "Zorro-Plata-55231x")
         page.check("input[name=accept]"); page.get_by_role("button", name="Crear mi cuenta").click()
         page.wait_for_selector("nav [data-tab]", timeout=15000); page.wait_for_timeout(900)
+        if page.locator("[data-tskip]").count():
+            page.click("[data-tskip]"); page.wait_for_timeout(500)  # el tutorial de bienvenida se prueba en tour_ui_test.py
         for t in ("Acepto", "Aceptar"):
             if page.get_by_role("button", name=t).count():
                 page.get_by_role("button", name=t).first.click(); page.wait_for_timeout(400)

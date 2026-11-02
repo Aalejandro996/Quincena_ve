@@ -47,7 +47,7 @@ check("una cuenta nueva es plan free y no es vendedora", j["user"]["plan"] == "f
 print("== Datos del negocio ==")
 code, st = ana.req("GET", "/api/state")
 data, rev = st["data"], st["revision"]
-check("el estado trae el negocio apagado por defecto", data["business"] == {"enabled": False, "name": "", "phone": "", "rateKind": "bcv_usd"} and data["sales"] == [])
+check("el estado trae el negocio apagado por defecto", data["business"] == {"enabled": False, "name": "", "phone": "", "rateKind": "bcv_usd", "type": "comercio", "profession": ""} and data["sales"] == [])
 new = {**data, "business": {"enabled": True, "name": "Bodega Ana", "phone": "04140000000"},
        "products": [{"id": "p1", "name": "Harina", "price": 1.5, "cost": 1.1, "stock": 20, "track": True}],
        "sales": [{"id": "s1", "date": "2026-10-27T12:00:00Z", "amount": 3, "currency": "USD", "method": "efectivo_usd", "items": [{"productId": "p1", "name": "Harina", "qty": 2, "price": 1.5}]},
@@ -157,7 +157,7 @@ neg = C()
 code, j = neg.req("POST", "/api/register", {"username": "luis", "email": "luis@x.com", "password": "Zorro-Plata-55231x", "accept_terms": True,
                                            "business_name": "  Panadería Luis  "}, ip="198.51.100.50")
 code, st = neg.req("GET", "/api/state")
-check("crear la cuenta del negocio la deja con el modo Negocio activo y su nombre", st["data"]["business"] == {"enabled": True, "name": "Panadería Luis", "phone": "", "rateKind": "bcv_usd"}, st["data"]["business"])
+check("crear la cuenta del negocio la deja con el modo Negocio activo y su nombre", st["data"]["business"] == {"enabled": True, "name": "Panadería Luis", "phone": "", "rateKind": "bcv_usd", "type": "comercio", "profession": ""}, st["data"]["business"])
 code, st = otro.req("GET", "/api/state")
 check("una cuenta personal nace sin negocio", st["data"]["business"]["enabled"] is False)
 
@@ -165,6 +165,19 @@ print("== Eliminar la cuenta de la dueña ==")
 code, j = ana.req("DELETE", "/api/account", {"password": "Zorro-Plata-55231x"})
 with A.app.app_context():
     check("sus vendedores quedan desactivados", A.db.session.get(A.User, pedro_id).active is False)
+
+print("== Profesionales ==")
+pro = C()
+code, j = pro.req("POST", "/api/register", {"username": "abogada", "email": "ab@x.com", "password": "Zorro-Plata-55231x", "accept_terms": True,
+                                            "business_name": "Escritorio Pérez", "business_type": "profesional", "profession": "abogado"}, ip="198.51.100.61")
+code, st = pro.req("GET", "/api/state")
+check("una abogada crea su cuenta de servicios profesionales", st["data"]["business"]["type"] == "profesional" and st["data"]["business"]["profession"] == "abogado", st["data"]["business"])
+nd = {**st["data"], "sales": [{"id": "h1", "date": "2026-10-27T12:00:00Z", "amount": 50, "currency": "USD", "method": "zelle", "client": "Sr. Gómez", "concept": "Consulta legal", "credit": True}]}
+code, j = pro.req("PUT", "/api/state", {"data": nd, "base_data": st["data"], "base_revision": st["revision"]})
+check("el cobro guarda el concepto del servicio", code == 200 and j["data"]["sales"][0]["concept"] == "Consulta legal", j)
+bad = {**j["data"], "business": {**j["data"]["business"], "type": "pirata", "profession": "astronauta"}}
+code, j = pro.req("PUT", "/api/state", {"data": bad, "base_data": j["data"], "base_revision": j["revision"]})
+check("tipos desconocidos se limpian", j["data"]["business"]["type"] == "comercio" and j["data"]["business"]["profession"] == "", j["data"]["business"])
 
 print(f"\n{ok} pruebas correctas, {fail} con falla")
 sys.exit(1 if fail else 0)

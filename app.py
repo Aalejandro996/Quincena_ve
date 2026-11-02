@@ -150,6 +150,9 @@ DEFAULT_SHARED_DATA = {
 }
 
 BIZ_RATE_KINDS = ("bcv_usd", "bcv_eur", "usdt")
+# Tipo de negocio: los de servicios (profesionales, salud, oficios, clases, creativos) hablan de cobros, servicios y clientes.
+BIZ_TYPES = ("comercio", "comida", "belleza", "online", "profesional", "salud", "tecnico", "educacion", "creativo", "otro")
+BIZ_PROFESSIONS = ("abogado", "contador", "administrador", "consultor", "arquitecto", "otro")
 
 
 def business_rate(data: dict) -> float:
@@ -588,10 +591,13 @@ def normalize_business(value: dict, result: dict) -> None:
     raw = value.get("business") if isinstance(value.get("business"), dict) else {}
     result["business"] = {"enabled": raw.get("enabled") is True, "name": str(raw.get("name") or "")[:80], "phone": str(raw.get("phone") or "")[:30],
                           # Tasa con la que trabaja el negocio: dólar BCV, euro BCV o USDT (paralelo).
-                          "rateKind": raw.get("rateKind") if raw.get("rateKind") in BIZ_RATE_KINDS else "bcv_usd"}
+                          "rateKind": raw.get("rateKind") if raw.get("rateKind") in BIZ_RATE_KINDS else "bcv_usd",
+                          "type": raw.get("type") if raw.get("type") in BIZ_TYPES else "comercio",
+                          "profession": raw.get("profession") if raw.get("profession") in BIZ_PROFESSIONS else ""}
     sales = _clean_rows(value.get("sales"), 20000, {
         "id": "id", "date": "date", "amount": "pos", "currency": "cur", "method": f"enum:{SALE_METHODS}", "accountId": "ref",
-        "client": "str:80", "phone": "str:30", "credit": "bool", "dueDate": "date", "note": "str:200", "rateUsed": "pos", "seller": "str:40"})
+        "client": "str:80", "phone": "str:30", "credit": "bool", "dueDate": "date", "note": "str:200", "rateUsed": "pos", "seller": "str:40",
+        "concept": "str:120"})
     raw_sales = {str(r.get("id")): r for r in value.get("sales", []) if isinstance(r, dict)} if isinstance(value.get("sales"), list) else {}
     for sale in sales:
         raw_items = raw_sales.get(sale["id"], {}).get("items")
@@ -657,6 +663,7 @@ def normalize_shared_data(value) -> dict:
     for r in result["receivables"]:
         r["paid"] = min(r["paid"], r["amount"])
     result["termsVersion"] = str(value.get("termsVersion") or "")[:20]
+    result["onboarded"] = value.get("onboarded") is True  # ya vio el tutorial de bienvenida
     normalize_business(value, result)
     income = value.get("income") if isinstance(value.get("income"), dict) else {}
     try:
@@ -1863,7 +1870,9 @@ def register():
     # Registro "Crea la cuenta de tu negocio": la cuenta nace con el modo Negocio activo.
     business_name = str(body.get("business_name") or "").strip()[:80]
     if business_name:
-        record.data["business"] = {"enabled": True, "name": business_name, "phone": ""}
+        btype = body.get("business_type") if body.get("business_type") in BIZ_TYPES else "comercio"
+        prof = body.get("profession") if btype == "profesional" and body.get("profession") in BIZ_PROFESSIONS else ""
+        record.data["business"] = {"enabled": True, "name": business_name, "phone": "", "type": btype, "profession": prof}
     db.session.commit()
     audit("account_registered", f"Cuenta creada ({country}, origen {source or 'directo'}{', negocio' if business_name else ''}); aceptó términos, privacidad y cookies (versión 2026-10-23)", user.id)
     send_verification(user)
@@ -2183,7 +2192,7 @@ def seller_sale():
     if error:
         return error
     body = request.get_json(silent=True) or {}
-    sale = {**{k: body.get(k) for k in ("amount", "currency", "method", "client", "phone", "credit", "dueDate", "note", "items")},
+    sale = {**{k: body.get(k) for k in ("amount", "currency", "method", "client", "phone", "credit", "dueDate", "note", "items", "concept")},
             "id": "v" + secrets.token_hex(8), "date": datetime.now(timezone.utc).isoformat(), "seller": g.user.username}
     record = db.session.query(SharedState).filter_by(user_id=owner.id).with_for_update().first()
     if record is None:

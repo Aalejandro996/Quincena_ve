@@ -8,6 +8,12 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## Tutorial de bienvenida y Mi Negocio para profesionales (web)
+- Tutorial con Quinci la primera vez: ingreso, pagos fijos, deudas, cómo ver los montos y un recorrido por la app (con el paso del negocio si lo tiene). Se puede saltar y volver a ver desde Más.
+- Mi Negocio por tipo: comercio, comida, belleza, ventas por redes, servicios profesionales (abogado, contador, administrador, consultor, arquitecto o ingeniero), salud, oficios, clases y creativos.
+- Para servicios: cobros, por cobrar, servicios, concepto del cobro con sugerencias según la profesión, recibo de honorarios (no fiscal) y nueva pestaña Clientes con lo cobrado y lo que debe cada uno.
+- Portada: los profesionales en la sección del negocio y en Para quién.
+
 ## Mejoras pedidas por los clientes (web)
 - Enviar sugerencia desde Más; el administrador las lee y marca en /admin › Sugerencias.
 - Gastos con fecha: se puede anotar un gasto de otro día (nunca futuro); en Bs. usa la tasa BCV de ese día si está guardada.

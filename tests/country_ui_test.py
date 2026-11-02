@@ -62,6 +62,9 @@ def session(pw, tz, user, country_ui):
     page.get_by_role("button", name="Crear mi cuenta").click()
     page.wait_for_selector("nav [data-tab]", timeout=15000)
     page.wait_for_timeout(800)
+    if page.locator("[data-tskip]").count():
+        page.click("[data-tskip]"); page.wait_for_timeout(500)
+    page.wait_for_timeout(800)
     return b, page, chosen
 
 
