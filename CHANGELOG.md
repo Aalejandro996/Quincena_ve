@@ -8,6 +8,12 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## Android: todas las mejoras nuevas
+- Quinci en Inicio y sus reacciones; tutorial de bienvenida (también en Más › Ver el tutorial).
+- Ver montos en $ BCV, USDT, € o Bs.; gastos con fecha; pagos fijos manuales o automáticos y compromisos sin duplicar; plan de pagos con orden, monto por quincena, comparación y programar el mes.
+- Mi Negocio para profesionales: tipo de negocio y profesión, cobros con concepto, por cobrar, clientes y recibo de honorarios.
+- Enviar sugerencia desde Más.
+
 ## Tutorial de bienvenida y Mi Negocio para profesionales (web)
 - Tutorial con Quinci la primera vez: ingreso, pagos fijos, deudas, cómo ver los montos y un recorrido por la app (con el paso del negocio si lo tiene). Se puede saltar y volver a ver desde Más.
 - Mi Negocio por tipo: comercio, comida, belleza, ventas por redes, servicios profesionales (abogado, contador, administrador, consultor, arquitecto o ingeniero), salud, oficios, clases y creativos.

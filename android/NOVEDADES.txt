@@ -1,1 +1,1 @@
-Arreglo: al abrir el enlace de confirmación del correo, la app ya no muestra un error y confirma el correo. Etiquetas de la barra inferior completas.
+Nuevo: Quinci, tu mascota que te avisa cómo vas; tutorial de bienvenida; ver montos en $, USDT, € o Bs.; gastos con fecha; pagos fijos sin duplicar; plan de deudas mejorado; Mi Negocio para profesionales (abogados, contadores y más) y enviar sugerencias.

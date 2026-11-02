@@ -144,8 +144,15 @@ class AppState(val repo: Repo, val scope: CoroutineScope, val snack: SnackbarHos
     var rating by mutableStateOf(false)
     var cart by mutableStateOf(mapOf<String, Double>())
     var sellersVer by mutableIntStateOf(0)
+    var tour by mutableIntStateOf(-1)  // paso del tutorial de bienvenida (-1 = cerrado)
+    var confirmDup by mutableStateOf("")  // aviso de duplicado ya mostrado: el segundo Guardar lo agrega igual
+    var pop by mutableStateOf<QSay?>(null)  // reacción de Quinci que aparece un momento
+    fun quinci(mood: String, text: String, prop: String = "", label: String = "") { pop = QSay(mood, prop, label, text, System.nanoTime()) }
 
-    val fmt: Fmt get() = Fmt(hide, repo.data.str("currency") == "BS", rateOf(repo.data))
+    val fmt: Fmt get() {
+        val c = repo.data.str("currency") ?: "USD"
+        return Fmt(hide, c == "BS", rateOf(repo.data), c, when (c) { "USDT" -> marketRateOf(repo.data); "EUR" -> repo.data.num("euroRate"); else -> 0.0 })
+    }
 
     fun open(kind: String, arg: String? = null) { sheet = Sheet(kind, arg) }
     fun close() { sheet = null }
@@ -214,6 +221,7 @@ fun App(
                 repo.seller -> SellerScreen(st, resumes)
                 else -> Main(st, resumes, shared, onShared, startAction, onStartAction)
             }
+            if (repo.loggedIn && !repo.seller) QuinciPopHost(st, Modifier.align(Alignment.BottomCenter))
             SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 150.dp, start = 16.dp, end = 16.dp)) {
                 Snackbar(it, shape = RoundedCornerShape(14.dp), containerColor = p.ink, contentColor = p.bg, actionColor = p.g)
             }
@@ -279,6 +287,7 @@ fun Main(
         if (!st.repo.loggedIn) return@LaunchedEffect
         st.rateInfo = st.repo.updateRate()
         st.mail = st.repo.emailStatus()
+        if (st.tour < 0 && tourDue(st.repo.data)) st.tour = 0
     }
     BackHandler(enabled = st.tab != "inicio") { st.go("inicio") }
 
@@ -315,6 +324,7 @@ fun Main(
             ) { Text("+", color = Color.White, fontSize = 32.sp) }
             NavBar(st)
         }
+        if (st.tour >= 0) TourOverlay(st)
     }
     SheetHost(st)
     TermsDialog(st)
@@ -360,7 +370,13 @@ fun Head(st: AppState) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Link(if (st.hide) "Mostrar" else "Ocultar", st::toggleHide)
-            Seg(listOf("USD" to "$", "BS" to Loc.cur.short), if (st.repo.data.str("currency") == "BS") "BS" else "USD", st::setCurrency)
+            // $ (BCV), USDT y € solo en Venezuela y cuando conocemos esas tasas; siempre la moneda local.
+            val d = st.repo.data
+            val ve = Loc.cur.code == "VE"
+            val opts = listOf("USD" to "$") + (if (ve && marketRateOf(d) > 0) listOf("USDT" to "USDT") else emptyList()) +
+                (if (ve && d.num("euroRate") > 0) listOf("EUR" to "€") else emptyList()) + listOf("BS" to Loc.cur.short)
+            val cur = d.str("currency")?.takeIf { c -> opts.any { it.first == c } } ?: "USD"
+            Seg(opts, cur, st::setCurrency)
         }
     }
 }

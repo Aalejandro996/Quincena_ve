@@ -57,6 +57,8 @@ fun AuthScreen(st: AppState) {
     var accept by remember { mutableStateOf(false) }
     var country by remember { mutableStateOf(guessCountry()) }
     var bizName by remember { mutableStateOf("") }
+    var bizType by remember { mutableStateOf("comercio") }
+    var bizProf by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val p = pal
@@ -84,13 +86,17 @@ fun AuthScreen(st: AppState) {
             Title("Quincena VE 🇻🇪", 36.sp)
             Mut(when (mode) {
                 "registro" -> "Crea tu cuenta gratis."
-                "negocio" -> "Crea la cuenta de tu negocio: ventas, fiado y caja en \$ y Bs. con la tasa del día. Gratis."
+                "negocio" -> "Crea la cuenta de tu negocio: ventas o cobros, fiado, clientes y caja en \$ y Bs. Para comercios, emprendedores y profesionales. Gratis."
                 "olvide" -> "Te enviaremos un enlace para elegir una contraseña nueva."
                 else -> "Tus finanzas, solo para ti."
             })
             when (mode) {
                 "registro", "negocio" -> {
-                    if (mode == "negocio") Field("Nombre del negocio", bizName, { bizName = it.take(80) }, placeholder = "Bodega Ana")
+                    if (mode == "negocio") {
+                        Field("Nombre del negocio o de tu oficina", bizName, { bizName = it.take(80) }, placeholder = "Bodega Ana, Escritorio Pérez…")
+                        Select("¿A qué te dedicas?", BIZ_TYPES.entries.map { it.key to it.value }, bizType) { bizType = it }
+                        if (bizType == "profesional") Select("Tu profesión", BIZ_PROFS.entries.map { it.key to it.value }, bizProf) { bizProf = it }
+                    }
                     Field(if (mode == "negocio") "Tu usuario" else "Usuario", user, { user = it })
                     Field("Correo", email, { email = it }, kind = KeyboardType.Email)
                     Select("¿En qué país vives?", COUNTRIES.map { it.code to it.name }, country) { country = it }
@@ -120,7 +126,7 @@ fun AuthScreen(st: AppState) {
                         pass.lowercase().contains(user.trim().lowercase()) -> error = "La contraseña no debe contener tu nombre de usuario."
                         !accept -> error = "Debes aceptar los términos y la política de privacidad para crear tu cuenta."
                         else -> submit {
-                            st.repo.register(user, email, pass, country, if (mode == "negocio") bizName else "")
+                            st.repo.register(user, email, pass, country, if (mode == "negocio") bizName else "", bizType, bizProf)
                             if (mode == "negocio") { st.tab = "negocio"; st.bizSub = "hoy" }
                         }
                     }

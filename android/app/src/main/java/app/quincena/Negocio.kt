@@ -48,7 +48,40 @@ val BIZ_CATS = linkedMapOf(
     "mercancia" to "Mercancía", "alquiler" to "Alquiler", "servicios" to "Servicios", "sueldos" to "Sueldos",
     "transporte" to "Transporte", "impuestos" to "Impuestos", "otro" to "Otro",
 )
-private val BIZ_SUBS = listOf("hoy" to "Hoy", "ventas" to "Ventas", "fiado" to "Fiado", "gastos" to "Gastos", "mes" to "Mes", "productos" to "Productos", "equipo" to "Equipo")
+// Tipos de negocio. Los de servicios (profesionales, salud, oficios, clases, creativos) hablan de cobros, servicios y clientes.
+val BIZ_TYPES = linkedMapOf("comercio" to "Bodega o tienda", "comida" to "Comida y bebidas", "belleza" to "Belleza y estética", "online" to "Ventas por redes",
+    "profesional" to "Servicios profesionales", "salud" to "Salud (médico, odontólogo, psicólogo…)", "tecnico" to "Oficios y técnicos",
+    "educacion" to "Clases y tutorías", "creativo" to "Diseño, fotografía y tecnología", "otro" to "Otro")
+val BIZ_PROFS = linkedMapOf("" to "—", "abogado" to "Abogado(a)", "contador" to "Contador(a)", "administrador" to "Administrador(a)",
+    "consultor" to "Consultor(a)", "arquitecto" to "Arquitecto(a) o ingeniero(a)", "otro" to "Otra profesión")
+private val SERVICE_TYPES = setOf("profesional", "salud", "tecnico", "educacion", "creativo")
+/** Conceptos sugeridos al cobrar, según la profesión o el tipo de servicio (igual que la web). */
+private val BIZ_CONCEPTS = mapOf(
+    "abogado" to listOf("Consulta legal", "Redacción de documento", "Poder", "Representación en juicio", "Asesoría mensual"),
+    "contador" to listOf("Declaración de ISLR", "Declaración de IVA", "Contabilidad mensual", "Libros contables", "Estados financieros"),
+    "administrador" to listOf("Administración mensual", "Nómina", "Gestión de cobranza", "Trámites"),
+    "consultor" to listOf("Consultoría", "Asesoría por hora", "Informe"), "arquitecto" to listOf("Proyecto", "Planos", "Inspección", "Asesoría técnica"),
+    "salud" to listOf("Consulta", "Control", "Tratamiento", "Procedimiento"), "tecnico" to listOf("Visita técnica", "Reparación", "Instalación", "Mantenimiento"),
+    "educacion" to listOf("Clase", "Mensualidad", "Curso", "Tutoría"), "creativo" to listOf("Diseño", "Sesión de fotos", "Desarrollo web", "Mantenimiento mensual"),
+    "profesional" to listOf("Consulta", "Asesoría", "Servicio"),
+)
+fun bizType(d: JsonObject) = d.obj("business").str("type")?.takeIf { it in BIZ_TYPES } ?: "comercio"
+fun bizSvc(d: JsonObject) = bizType(d) in SERVICE_TYPES
+fun bizConcepts(d: JsonObject): List<String> {
+    val prof = d.obj("business").str("profession").orEmpty()
+    return BIZ_CONCEPTS[if (bizType(d) == "profesional" && prof in BIZ_CONCEPTS) prof else bizType(d)] ?: emptyList()
+}
+/** Palabras de la pantalla según el tipo: ventas y fiado (comercio) o cobros y por cobrar (servicios). */
+class BizV(val sale: String, val sales: String, val n1: String, val nn: String, val today: String, val add: String, val neu: String, val credit: String,
+    val creditBox: String, val prods: String, val ofToday: String, val none: String, val first: String, val noCredit: String, val receipt: String, val thanks: String)
+fun bizV(d: JsonObject) = if (bizSvc(d)) BizV("Cobro", "Cobros", "cobro", "cobros", "Cobraste hoy", "+ Cobro", "Nuevo cobro", "Por cobrar",
+    "Me paga después (queda por cobrar)", "Servicios", "Cobros de hoy", "Aún no hay cobros.", "Registra tu primer cobro con el botón + Cobro.",
+    "Nadie te debe. Cuando un cliente te pague después, marca \"Me paga después\" en el cobro.", "Recibo de honorarios", "¡Gracias por su confianza!")
+else BizV("Venta", "Ventas", "venta", "ventas", "Vendiste hoy", "+ Venta", "Nueva venta", "Fiado", "Es fiado (me paga después)", "Productos",
+    "Ventas de hoy", "Aún no hay ventas.", "Registra tu primera venta con el botón + Venta.", "Nadie te debe. Cuando vendas fiado, marca \"Es fiado\" en la venta.",
+    "Recibo de venta", "¡Gracias por tu compra!")
+private fun bizSubs(d: JsonObject): List<Pair<String, String>> { val v = bizV(d)
+    return listOf("hoy" to "Hoy", "ventas" to v.sales, "fiado" to v.credit, "clientes" to "Clientes", "gastos" to "Gastos", "mes" to "Mes", "productos" to v.prods, "equipo" to "Equipo") }
 private val PLUS_SUBS = setOf("productos", "equipo")
 
 // ---------- Tasa del negocio ----------
@@ -161,13 +194,15 @@ fun receiptText(d: JsonObject, s: JsonObject): String {
     val items = s.arr("items").joinToString("\n") { "${inputMoney(it.num("qty"))} × ${it.str("name")}: ${f.orig(it.num("price") * it.num("qty"), "USD")}" }
     val pend = salePending(d, s)
     return buildString {
-        append(b.str("name")?.ifBlank { null } ?: "Mi negocio").append("\nRecibo de venta · ").append(dayText(s.str("date"))).append('\n')
+        append(b.str("name")?.ifBlank { null } ?: "Mi negocio").append("\n").append(bizV(d).receipt).append(" · ").append(dayText(s.str("date"))).append('\n')
+        s.str("client")?.takeIf { it.isNotBlank() }?.let { append("Cliente: ").append(it).append('\n') }
+        s.str("concept")?.takeIf { it.isNotBlank() }?.let { append("Concepto: ").append(it).append('\n') }
         if (items.isNotEmpty()) append(items).append('\n')
         append("Total: ").append(f.orig(s.num("amount"), s.str("currency")))
         if (s.str("currency") == "BS") append(" (").append(f.orig(bizUsd(d, s), "USD")).append(")")
-        append("\nPago: ").append(if (s.bool("credit") == true) "fiado" else SALE_METHODS[s.str("method")] ?: "")
+        append("\nPago: ").append(if (s.bool("credit") == true) bizV(d).credit.lowercase() else SALE_METHODS[s.str("method")] ?: "")
         if (pend > .005) append("\nPor pagar: ").append(f.orig(pend, "USD"))
-        append("\n¡Gracias por tu compra!")
+        append("\n").append(bizV(d).thanks)
         b.str("phone")?.takeIf { it.isNotBlank() }?.let { append("\nWhatsApp: ").append(it) }
         append("\n\nNo es factura fiscal.")
     }
@@ -264,14 +299,15 @@ fun Negocio(st: AppState) {
         Link("Configurar", { st.open("bizconf") })
     }
     Chips {
-        BIZ_SUBS.forEach { (k, l) -> Chip(if (k in PLUS_SUBS && !st.repo.plus) "$l · Plus" else l, st.bizSub == k) { st.bizSub = k } }
+        bizSubs(st.repo.data).forEach { (k, l) -> Chip(if (k in PLUS_SUBS && !st.repo.plus) "$l · Plus" else l, st.bizSub == k) { st.bizSub = k } }
     }
     when (st.bizSub) {
         "ventas" -> BizVentas(st)
         "fiado" -> BizFiado(st)
+        "clientes" -> BizClientes(st)
         "gastos" -> BizGastos(st)
         "mes" -> BizMes(st)
-        "productos" -> if (st.repo.plus) BizProductos(st) else PlusLock(st, "El catálogo de productos")
+        "productos" -> if (st.repo.plus) BizProductos(st) else PlusLock(st, if (bizSvc(st.repo.data)) "El catálogo de servicios" else "El catálogo de productos")
         "equipo" -> if (st.repo.plus) BizEquipo(st) else PlusLock(st, "Agregar vendedores")
         else -> BizHoy(st)
     }
@@ -285,9 +321,10 @@ private fun RowScope.SaleRow(st: AppState, s: JsonObject, actions: Boolean) {
     val pend = salePending(d, s)
     val items = s.arr("items").joinToString(", ") { "${inputMoney(it.num("qty"))} ${it.str("name")}" }
     Column(Modifier.weight(1f)) {
-        B(if (s.bool("credit") == true) "Fiado" + (s.str("client")?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
-          else s.str("client")?.takeIf { it.isNotBlank() } ?: SALE_METHODS[s.str("method")] ?: "Venta")
-        Mut(listOfNotNull(dayText(s.str("date")), SALE_METHODS[s.str("method")], items.ifBlank { null },
+        val v = bizV(d)
+        B(if (s.bool("credit") == true) v.credit + (s.str("client")?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+          else s.str("client")?.takeIf { it.isNotBlank() } ?: SALE_METHODS[s.str("method")] ?: v.sale)
+        Mut(listOfNotNull(s.str("concept")?.takeIf { it.isNotBlank() }, dayText(s.str("date")), SALE_METHODS[s.str("method")], items.ifBlank { null },
             s.str("seller")?.takeIf { it.isNotBlank() }?.let { "vendió $it" }, if (pend > .005) "debe ${f.show(pend)}" else null,
             s.str("note")?.takeIf { it.isNotBlank() }).joinToString(" · "))
     }
@@ -309,9 +346,10 @@ private fun BizHoy(st: AppState) {
     val last = d.arr("cashClosings").firstOrNull { localDay(it.str("date")) == today }
     val sales = d.arr("sales").filter { localDay(it.str("date")) == today }
     val other = if (f.bs) BizFmt(f.hide, false, f.rate, f.sym).show(t.sold) else BizFmt(f.hide, true, f.rate, f.sym).show(t.sold)
-    Hero("Vendiste hoy", f.show(t.sold), "${t.n} ${if (t.n == 1) "venta" else "ventas"} · $other a la tasa ${BIZ_RATES[bizKind(d)]}")
+    val v = bizV(d)
+    Hero(v.today, f.show(t.sold), "${t.n} ${if (t.n == 1) v.n1 else v.nn} · $other a la tasa ${BIZ_RATES[bizKind(d)]}")
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Btn("+ Venta", { st.open("bizventa") }, Modifier.weight(1f))
+        Btn(v.add, { st.open("bizventa") }, Modifier.weight(1f))
         Btn("Gasto del negocio", { st.open("bizgasto") }, Modifier.weight(1f), outline = true)
     }
     QCard {
@@ -327,16 +365,17 @@ private fun BizHoy(st: AppState) {
         Btn(if (last != null) "Volver a contar" else "Cerrar la caja", { st.open("bizcierre") }, outline = true)
     }
     QCard {
-        B("Ventas de hoy")
-        Items(sales, "Registra tu primera venta con el botón + Venta.") { s -> SaleRow(st, s, true) }
+        B(v.ofToday)
+        Items(sales, v.first) { s -> SaleRow(st, s, true) }
     }
 }
 
 @Composable
 private fun BizVentas(st: AppState) {
     val all = st.repo.data.arr("sales").sortedByDescending { it.str("date") ?: "" }.take(150)
-    Btn("+ Venta", { st.open("bizventa") })
-    QCard { Items(all, "Aún no hay ventas.") { s -> SaleRow(st, s, true) } }
+    val v = bizV(st.repo.data)
+    Btn(v.add, { st.open("bizventa") })
+    QCard { Items(all, v.none) { s -> SaleRow(st, s, true) } }
 }
 
 @Composable
@@ -349,7 +388,7 @@ private fun BizFiado(st: AppState) {
     val name = d.obj("business").str("name")?.ifBlank { null } ?: "mi negocio"
     QCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { B("Te deben tus clientes"); B(f.show(open.sumOf { salePending(d, it) }), color = pal.g) }
-        Items(open, "Nadie te debe. Cuando vendas fiado, marca \"Es fiado\" en la venta.") { s ->
+        Items(open, bizV(d).noCredit) { s ->
             val p = salePending(d, s)
             Column(Modifier.weight(1f)) {
                 B(s.str("client")?.ifBlank { null } ?: "Cliente")
@@ -363,6 +402,41 @@ private fun BizFiado(st: AppState) {
                 })
                 Btn("Abonó", { st.open("bizabono", s.id) }, small = true)
             }
+        }
+    }
+}
+
+/** Clientes: lo cobrado a cada uno y lo que te debe (útil para profesionales con clientes fijos). */
+@Composable
+private fun BizClientes(st: AppState) {
+    val d = st.repo.data
+    val f = bizFmt(st)
+    val ctx = LocalContext.current
+    val v = bizV(d)
+    val rf = BizFmt(false, false, bizRate(d), bizSym(d))
+    class C(val name: String, var total: Double = 0.0, var pend: Double = 0.0, var n: Int = 0, var last: String = "", var phone: String = "")
+    val m = linkedMapOf<String, C>()
+    for (x in d.arr("sales")) {
+        val c = x.str("client")?.trim().orEmpty().ifBlank { null } ?: continue
+        val r = m.getOrPut(c.lowercase()) { C(c) }
+        r.total += bizUsd(d, x); r.pend += salePending(d, x); r.n++
+        if ((x.str("date") ?: "") > r.last) r.last = x.str("date") ?: ""
+        x.str("phone")?.takeIf { it.isNotBlank() }?.let { r.phone = it }
+    }
+    val list = m.values.sortedWith(compareByDescending<C> { it.pend }.thenByDescending { it.total })
+    val bname = d.obj("business").str("name")?.ifBlank { null } ?: "nosotros"
+    QCard {
+        B("Tus clientes")
+        Mut("Lo que te han pagado y lo que te deben, por cliente. Se arma solo con el nombre del cliente en cada ${v.n1}.")
+        Items(list, "Escribe el nombre del cliente al registrar cada ${v.n1} y aquí verás su historial.") { r ->
+            Column(Modifier.weight(1f)) {
+                B(r.name)
+                Mut("${r.n} ${if (r.n == 1) v.n1 else v.nn} · ${f.show(r.total)} en total · último ${dayText(r.last)}")
+                if (r.pend > .005) Text("Debe ${f.show(r.pend)}", color = pal.bad, fontSize = 14.sp)
+            }
+            if (r.pend > .005 && r.phone.isNotBlank()) Link("Recordar", {
+                openUrl(ctx, waLink(r.phone, "Hola ${r.name}, le recuerdo el saldo pendiente de ${rf.orig(r.pend, "USD")} con $bname. ¡Gracias!"))
+            })
         }
     }
 }
@@ -404,16 +478,16 @@ private fun BizMes(st: AppState) {
         if (uri != null) runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(bizCsv(d, ym).toByteArray()) } }
             .onSuccess { st.toast("Listo: se guardó el Excel del mes.") }.onFailure { st.toast("No pudimos guardar el archivo.") }
     }
-    Hero("Ganancia de ${monthName(ym)}", f.show(m.profit), "Ventas menos compras y gastos, en ${bizCurName(d)} a la tasa de cada día")
+    Hero("Ganancia de ${monthName(ym)}", f.show(m.profit), "${bizV(d).sales} menos compras y gastos, en ${bizCurName(d)} a la tasa de cada día")
     QCard {
-        Line("Ventas (${m.n})", f.show(m.sales))
-        Line("Compras de mercancía", f.show(-m.buy))
+        Line("${bizV(d).sales} (${m.n})", f.show(m.sales))
+        if (m.buy > 0 || !bizSvc(d)) Line(if (bizSvc(d)) "Compras de materiales" else "Compras de mercancía", f.show(-m.buy))
         Line("Otros gastos del negocio", f.show(-m.exp))
         if (m.cogs > 0) Mut("Costo de lo vendido según tus productos: ${f.show(m.cogs)}")
         HorizontalDivider(color = pal.line)
         Line("Ganancia", f.show(m.profit), pal.g)
         Line("Te pagaste a ti", f.show(m.ret))
-        Line("Fiado por cobrar", f.show(m.pending))
+        Line(if (bizSvc(d)) "Por cobrar" else "Fiado por cobrar", f.show(m.pending))
     }
     if (st.repo.plus) QCard {
         B("Para tu contador")
@@ -499,8 +573,10 @@ private fun CheckRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit
 fun SaleEditor(
     products: List<JsonObject>, rate: Double, cart: Map<String, Double>, onCart: (Map<String, Double>) -> Unit,
     accPicker: (@Composable (String, (String) -> Unit) -> Unit)?, initAmount: String = "", initCur: String = "BS", initNote: String = "",
-    saveLabel: String = "Guardar", onCancel: (() -> Unit)? = null, sym: String = "$", toast: (String) -> Unit, onSave: (JsonObject) -> Unit,
+    saveLabel: String = "Guardar", onCancel: (() -> Unit)? = null, sym: String = "$", toast: (String) -> Unit,
+    svc: Boolean = false, concepts: List<String> = emptyList(), clients: List<String> = emptyList(), onSave: (JsonObject) -> Unit,
 ) {
+    var concept by remember { mutableStateOf("") }
     val f = BizFmt(false, false, rate, sym)
     var amount by remember { mutableStateOf(initAmount) }
     var cur by remember { mutableStateOf(initCur) }
@@ -534,11 +610,18 @@ fun SaleEditor(
             Line("Total", f.orig(total(), "USD"))
         }
     }
+    if (svc || concepts.isNotEmpty()) {
+        Field("Concepto${if (svc) "" else " (opcional)"}", concept, { concept = it.take(120) }, placeholder = concepts.firstOrNull() ?: "")
+        if (concepts.isNotEmpty()) Chips { concepts.forEach { c -> Chip(c, concept == c) { concept = c } } }
+    }
     MoneyField("Monto", amount) { amount = it }
     Select("Moneda", listOf("BS" to "Bolívares (Bs.)", "USD" to divisaLabel(sym)), cur) { cur = it; refill(it, cart) }
     Select("¿Cómo te pagaron?", METHOD_OPTS, method) { method = it }
-    CheckRow("Es fiado (me paga después)", credit) { credit = it }
+    CheckRow(if (svc) "Me paga después (queda por cobrar)" else "Es fiado (me paga después)", credit) { credit = it }
     Field("Cliente${if (credit) "" else " (opcional)"}", client, { client = it.take(80) })
+    if (client.length >= 1) clients.filter { it.contains(client, true) && !it.equals(client, true) }.take(4).takeIf { it.isNotEmpty() }?.let { m ->
+        Chips { m.forEach { c -> Chip(c, false) { client = c } } }
+    }
     Field("Teléfono del cliente (opcional, para WhatsApp)", phone, { phone = it.take(30) }, placeholder = "0414 000 0000", kind = KeyboardType.Phone)
     if (credit) DateField("¿Para cuándo paga?", due, { due = it }, optional = true)
     Field("Nota (opcional)", note, { note = it.take(200) })
@@ -546,11 +629,12 @@ fun SaleEditor(
     Btn(saveLabel, {
         val a = money(amount) ?: return@Btn toast("Escribe un monto mayor a cero.")
         if (credit && client.isBlank()) return@Btn toast("Escribe el nombre del cliente que te debe.")
+        if (svc && concept.isBlank()) return@Btn toast("Escribe el concepto del servicio.")
         val items = cart.filter { it.value > 0 }.mapNotNull { (id, q) ->
             products.firstOrNull { it.id == id }?.let { p -> row("productId" to id, "name" to p.str("name"), "qty" to q, "price" to p.num("price")) }
         }
         onSave(row("id" to bizId("v"), "date" to nowIso(), "amount" to a, "currency" to cur, "method" to method, "credit" to credit,
-            "client" to client.trim().ifBlank { null }, "phone" to phone.trim().ifBlank { null }, "dueDate" to due.ifBlank { null }.takeIf { credit },
+            "client" to client.trim().ifBlank { null }, "concept" to concept.trim().ifBlank { null }, "phone" to phone.trim().ifBlank { null }, "dueDate" to due.ifBlank { null }.takeIf { credit },
             "note" to note.trim().ifBlank { null }, "accountId" to acc.ifBlank { null }, "rateUsed" to (if (cur == "BS") rate else null),
             "items" to items.ifEmpty { null }))
     })
@@ -562,16 +646,18 @@ fun VentaForm(st: AppState, arg: String?) {
     val d = st.repo.data
     // "sms:<monto>:<moneda>": venta abierta desde el mensaje de un pago móvil recibido.
     val sms = arg?.takeIf { it.startsWith("sms:") }?.split(":")
-    BizTitle("Nueva venta")
+    val v = bizV(d)
+    BizTitle(v.neu)
     SaleEditor(
         if (st.repo.plus) activeProducts(d) else emptyList(), bizRate(d), st.cart, { st.cart = it },
         { v, on -> AccSelect(st, v, "¿A qué cuenta entró? (opcional)", on) },
         initAmount = sms?.getOrNull(1)?.toDoubleOrNull()?.let { inputMoney(it) } ?: "", initCur = sms?.getOrNull(2) ?: "BS",
         initNote = if (sms != null) "Pago móvil recibido" else "", onCancel = { st.close() }, sym = bizSym(d), toast = { st.toast(it) },
+        svc = bizSvc(d), concepts = bizConcepts(d), clients = d.arr("sales").mapNotNull { it.str("client")?.ifBlank { null } }.distinct(),
     ) { sale ->
         st.close(); st.cart = emptyMap()
         val credit = sale.bool("credit") == true
-        st.act((if (credit) "Fiado anotado: " else "Venta registrada: ") + bizFmt(st).orig(sale.num("amount"), sale.str("currency")), undo = true) { it.addFirst("sales", sale) }
+        st.act((if (credit) (if (bizSvc(d)) "Por cobrar anotado: " else "Fiado anotado: ") else (if (bizSvc(d)) "Cobro registrado: " else "Venta registrada: ")) + bizFmt(st).orig(sale.num("amount"), sale.str("currency")), undo = true) { it.addFirst("sales", sale) }
     }
 }
 
@@ -582,9 +668,13 @@ fun BizConfForm(st: AppState) {
     var name by remember { mutableStateOf(b.str("name") ?: "") }
     var phone by remember { mutableStateOf(b.str("phone") ?: "") }
     var kind by remember { mutableStateOf(bizKind(st.repo.data)) }
+    var type by remember { mutableStateOf(bizType(st.repo.data)) }
+    var prof by remember { mutableStateOf(b.str("profession").orEmpty()) }
     val rf = Fmt(false, false, 1.0)
     BizTitle("Mi negocio")
     Field("Nombre del negocio", name, { name = it.take(80) }, placeholder = "Bodega Ana")
+    Select("¿Qué tipo de negocio es?", BIZ_TYPES.entries.map { it.key to it.value }, type) { type = it }
+    Select("Si das servicios profesionales, ¿cuál es tu profesión?", BIZ_PROFS.entries.map { it.key to it.value }, prof) { prof = it }
     Field("WhatsApp del negocio (opcional, sale en los recibos)", phone, { phone = it.take(30) }, kind = KeyboardType.Phone)
     Select("¿Con qué tasa trabaja tu negocio?", BIZ_RATES.entries.map { (k, l) ->
         k to l + (bizRateOf(st.repo.data, k).takeIf { it > 0 }?.let { " · Bs. ${rf.plain(it)}" } ?: " · aún sin dato") }, kind) { kind = it }
@@ -592,12 +682,12 @@ fun BizConfForm(st: AppState) {
     Mut("Las ventas y gastos del negocio van aparte: no se mezclan con tu quincena ni tu presupuesto. Quincena VE no emite facturas fiscales.")
     if (on) OutlineDanger("Ocultar el modo Negocio") {
         st.close(); st.go("mas")
-        st.act("Modo Negocio oculto. Tus datos del negocio se guardan.") { it["business"] = row("enabled" to false, "name" to name.trim(), "phone" to phone.trim(), "rateKind" to kind) }
+        st.act("Modo Negocio oculto. Tus datos del negocio se guardan.") { it["business"] = row("enabled" to false, "name" to name.trim(), "phone" to phone.trim(), "rateKind" to kind, "type" to type, "profession" to prof) }
     }
     BizFooter(st, {
         if (name.isBlank()) return@BizFooter st.toast("Escribe el nombre del negocio.")
         st.close(); st.go("negocio"); st.bizSub = "hoy"
-        st.act(if (on) "Guardado" else "Listo: tu negocio está activo.") { it["business"] = row("enabled" to true, "name" to name.trim(), "phone" to phone.trim(), "rateKind" to kind) }
+        st.act(if (on) "Guardado" else "Listo: tu negocio está activo.") { it["business"] = row("enabled" to true, "name" to name.trim(), "phone" to phone.trim(), "rateKind" to kind, "type" to type, "profession" to prof) }
     }, if (on) "Guardar" else "Activar mi negocio")
 }
 

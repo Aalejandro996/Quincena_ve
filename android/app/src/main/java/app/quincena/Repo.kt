@@ -92,10 +92,10 @@ class Repo(ctx: Context) {
     }
 
     /** Crea la cuenta (si el servidor tiene el registro abierto) y entra. */
-    suspend fun register(user: String, email: String, pass: String, country: String = "VE", businessName: String = "") {
+    suspend fun register(user: String, email: String, pass: String, country: String = "VE", businessName: String = "", businessType: String = "", profession: String = "") {
         api.call("POST", "/api/register", buildJsonObject {
             put("username", user.trim().lowercase()); put("email", email.trim()); put("password", pass); put("accept_terms", true); put("country", country)
-            if (businessName.isNotBlank()) put("business_name", businessName.trim())
+            if (businessName.isNotBlank()) { put("business_name", businessName.trim()); put("business_type", businessType); put("profession", profession) }
         })
         login(user, pass)
         // Al crear la cuenta ya aceptó los términos vigentes.
@@ -121,6 +121,9 @@ class Repo(ctx: Context) {
     }.getOrNull()
 
     suspend fun resendVerification() { api.call("POST", "/api/resend-verification") }
+    suspend fun sendSuggestion(text: String, kind: String) {
+        api.call("POST", "/api/suggestions", buildJsonObject { put("text", text); put("kind", kind); put("platform", "android") })
+    }
 
     /** Cambia la contraseña. El servidor cierra la sesión en los demás teléfonos (este sigue abierto). */
     suspend fun changePassword(old: String, new: String) {

@@ -36,7 +36,7 @@ fun qnaLabel(p: Period) = "${p.half}.ª qna. de ${p.ym.month.getDisplayName(Text
 
 /** Lo ya comprometido en una quincena: pagos programados, compromisos pendientes y gastos fijos. */
 fun committedIn(d: JsonObject, p: Period): Double {
-    var c = dueIn(d, p.from, p.to)
+    var c = dueIn(d, p.from, p.to, withFixed = false)
     val last = p.ym.lengthOfMonth()
     for (r in d.arr("recurring")) {
         if (r.bool("active") == false) continue

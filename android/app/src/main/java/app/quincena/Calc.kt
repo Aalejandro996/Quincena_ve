@@ -11,6 +11,7 @@ import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -127,10 +128,13 @@ fun nowIso(): String = Instant.now().toString()
 // ---------- Formato ----------
 
 /** Formato de montos: oculta, cambia de moneda y usa coma decimal, igual que la web. */
-class Fmt(val hide: Boolean, val bs: Boolean, val rate: Double) {
+class Fmt(val hide: Boolean, val bs: Boolean, val rate: Double, val mode: String = "USD", val alt: Double = 0.0) {
     private fun n(v: Double) = String.format(ES, "%,.2f", v)
     private fun nl(v: Double) = String.format(ES, "%,." + Loc.cur.dec + "f", v)
-    fun show(usd: Double) = if (hide) "••••" else if (bs) Loc.cur.sym + " " + nl(usd * rate) else "\$ " + n(usd)
+    /** Totales en $ BCV vistos en $, USDT, € (con su tasa en Bs., [alt]) o la moneda local. */
+    fun show(usd: Double) = if (hide) "••••" else if (bs) Loc.cur.sym + " " + nl(usd * rate)
+        else if (mode == "USDT" && alt > 0) "USDT " + n(usd * rate / alt)
+        else if (mode == "EUR" && alt > 0) "€ " + n(usd * rate / alt) else "\$ " + n(usd)
     fun orig(a: Double, cur: String?) = if (hide) "••••" else if (cur == "BS") Loc.cur.sym + " " + nl(a) else "\$ " + n(a)
     fun plain(v: Double) = n(v)
     /** Monto en moneda local (sin decimales en pesos colombianos y chilenos). */
@@ -286,8 +290,62 @@ fun spentByCat(d: JsonObject, from: LocalDate, to: LocalDate): Map<String, Doubl
 fun schoolPaid(d: JsonObject, expenseId: String) = d.arr("schoolPayments").filter { it.str("expenseId") == expenseId }.sumOf { it.num("amount") }
 fun schoolLeft(d: JsonObject, x: JsonObject) = max(0.0, x.num("amount") - schoolPaid(d, x.id))
 
-fun dueIn(d: JsonObject, from: LocalDate, to: LocalDate): Double {
+/** Con un gasto en Bs. de otro día, usa la tasa BCV (y USDT) de ese día si está en el historial. */
+fun dayRates(d: JsonObject, day: String, rf: Array<Pair<String, Any?>>): Array<Pair<String, Any?>> {
+    val h = (d["rateHistory"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }?.firstOrNull { it.str("d") == day } ?: return rf
+    val m = rf.toMap().toMutableMap()
+    val old = m["bcvRate"] as? Double ?: return rf
+    val b = h.num("b").takeIf { it > 0 } ?: return rf
+    val mk = h.num("m").takeIf { it > 0 }
+    m["bcvRate"] = b
+    if (m["rateType"] == "bcv" && m["rateUsed"] == old) m["rateUsed"] = b
+    if (m["rateType"] == "usdt" && mk != null) m["rateUsed"] = mk
+    if (mk != null) m["marketRate"] = mk
+    return m.toList().toTypedArray()
+}
+
+/** Gastos para vivir: promedio de los últimos 3 meses con gastos, sin los pagos de deudas. */
+fun livingGuess(d: JsonObject): Double {
+    val now = YearMonth.now()
+    val vals = (1..3).map { i ->
+        val ym = now.minusMonths(i.toLong())
+        d.arr("expenses").filter { it.str("category") != "deudas" && inRange(it.str("date"), ym.atDay(1), ym.atEndOfMonth()) }
+            .sumOf { usdOf(d, it.num("amount"), it.str("currency")) }
+    }.filter { it > 0 }
+    return if (vals.isEmpty()) 0.0 else Math.round(vals.average()).toDouble()
+}
+
+private fun nrm(t: String?) = java.text.Normalizer.normalize(t.orEmpty().lowercase(), java.text.Normalizer.Form.NFD)
+    .replace(Regex("\\p{M}"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+
+/** Evita anotar lo mismo como pago fijo y como compromiso (se contaría dos veces). Devuelve el aviso o "". */
+fun dupOf(d: JsonObject, desc: String, amt: Double, cur: String): String {
+    val n = nrm(desc)
+    fun hit(t: String?, a: Double, c: String?): Boolean {
+        val m = nrm(t)
+        return m.isNotEmpty() && n.isNotEmpty() && (m == n || (n.length >= 4 && m.contains(n)) || (m.length >= 4 && n.contains(m)) || (abs(a - amt) < .005 && c == cur && amt > 0))
+    }
+    d.arr("recurring").firstOrNull { hit(it.str("description"), it.num("amount"), it.str("currency")) }?.let { return "«${it.str("description")}» ya está como pago fijo de cada mes" }
+    d.arr("schoolExpenses").firstOrNull { schoolLeft(d, it) > .005 && hit(it.str("description"), it.num("amount"), it.str("currency")) }
+        ?.let { return "«${it.str("description")}» ya está como compromiso" }
+    return ""
+}
+
+/** Un pago fijo ya está pagado este mes si existe su gasto rec_<id>_<AAAA-MM>. */
+fun recPaid(d: JsonObject, r: JsonObject, ym: YearMonth): Boolean {
+    val id = "rec_${r.id}_" + String.format(Locale.US, "%04d-%02d", ym.year, ym.monthValue)
+    return d.arr("expenses").any { it.id == id }
+}
+fun recDay(r: JsonObject, ym: YearMonth): LocalDate = ym.atDay(min(r.num("day").toInt().coerceAtLeast(1), ym.lengthOfMonth()))
+
+fun dueIn(d: JsonObject, from: LocalDate, to: LocalDate, withFixed: Boolean = true): Double {
     var due = 0.0
+    // Pagos fijos del periodo que todavía no se anotaron (los automáticos se anotan solos ese día; los manuales al pagarlos).
+    val ym = YearMonth.from(from)
+    if (withFixed) for (r in d.arr("recurring")) if (r.bool("active") != false) {
+        val day = recDay(r, ym)
+        if (!day.isBefore(from) && !day.isAfter(to) && !recPaid(d, r, ym)) due += usdOf(d, r.num("amount"), r.str("currency"))
+    }
     for (p in d.arr("plannedDebtPayments")) if (p.str("status") == "planned" && inRange(p.str("scheduledDate"), from, to)) {
         due += usdOf(d, p.num("amount"), p.str("currency"))
     }
@@ -323,9 +381,10 @@ fun monthSummary(d: JsonObject): Month {
 
 /** Simulador "Pagar deudas sin ahogarte": avalancha o bola de nieve, igual que plan() en la web. */
 data class Plan(val configured: Boolean, val rec: Double, val over: Boolean, val months: Int?, val interest: Double, val strategy: String,
-    val payoff: Map<String, Int> = emptyMap())
+    val payoff: Map<String, Int> = emptyMap(), val first: Map<String, Double> = emptyMap(), val cap: Double = 0.0, val minT: Double = 0.0)
 
-fun debtPlan(d: JsonObject): Plan {
+/** [strat] permite comparar con la otra estrategia sin cambiar el plan guardado. */
+fun debtPlan(d: JsonObject, strat: String? = null): Plan {
     val s = d.obj("debtPlan")
     val inc = monthlyIncome(d)
     val ess = max(0.0, s.num("monthlyEssentials"))
@@ -347,13 +406,14 @@ fun debtPlan(d: JsonObject): Plan {
 
     val minT = ds.sumOf { it.min }
     val rec = min(cap, max(minT, cap * pp / 100))
-    val strategy = if (s.str("strategy") == "snowball") "snowball" else "avalanche"
+    val strategy = strat ?: if (s.str("strategy") == "snowball") "snowball" else "avalanche"
     val configured = s.bool("configured") == true
     val over = minT > cap + .01
-    if (!configured || ds.isEmpty() || ds.any { it.min <= .005 } || over || rec <= 0) return Plan(configured, rec, over, null, 0.0, strategy)
+    if (!configured || ds.isEmpty() || ds.any { it.min <= .005 } || over || rec <= 0) return Plan(configured, rec, over, null, 0.0, strategy, cap = cap, minT = minT)
 
     val b = ds.map { B(it.id, it.bal, it.min, it.mr, it.known) }
     val payoff = mutableMapOf<String, Int>()
+    val first = mutableMapOf<String, Double>()  // lo que toca pagar a cada deuda este mes
     val total = b.sumOf { it.bal }
     var m = 0
     var int = 0.0
@@ -366,6 +426,7 @@ fun debtPlan(d: JsonObject): Plan {
         for (x in b) {
             if (x.bal <= .02) continue
             val p = minOf(x.min, x.bal, bud); x.bal -= p; bud -= p
+            if (m == 1) first[x.id] = (first[x.id] ?: 0.0) + p
         }
         val open = b.filter { it.bal > .02 }
         val o = if (strategy == "snowball") open.sortedBy { it.bal }
@@ -373,11 +434,12 @@ fun debtPlan(d: JsonObject): Plan {
         for (x in o) {
             if (bud <= .005) break
             val p = min(x.bal, bud); x.bal -= p; bud -= p
+            if (m == 1) first[x.id] = (first[x.id] ?: 0.0) + p
         }
         for (x in b) if (x.bal <= .02 && x.id !in payoff) payoff[x.id] = m
         if (m > 12 && b.sumOf { it.bal } >= total) break
     }
-    return if (b.none { it.bal > .02 }) Plan(true, rec, false, m, int, strategy, payoff) else Plan(true, rec, false, null, 0.0, strategy, payoff)
+    return if (b.none { it.bal > .02 }) Plan(true, rec, false, m, int, strategy, payoff, first, cap, minT) else Plan(true, rec, false, null, 0.0, strategy, payoff, first, cap, minT)
 }
 
 // ---------- Mantenimiento al cargar (igual que load() + genRecurring() en la web) ----------
@@ -395,7 +457,7 @@ fun maintain(m: MutableMap<String, JsonElement>): Boolean {
     val now = java.time.LocalDateTime.now()
     val cur = now.year * 12 + now.monthValue - 1
     val rec = m.rows("recurring").map { r ->
-        if (r.bool("active") == false) return@map r
+        if (r.bool("active") == false || r.str("mode") == "manual") return@map r
         val lg = r.str("lastGenerated").orEmpty()
         var last = if (lg.length >= 7) (lg.take(4).toIntOrNull() ?: 0) * 12 + (lg.substring(5, 7).toIntOrNull() ?: 1) - 1 else cur - 1
         last = max(last, cur - 24)

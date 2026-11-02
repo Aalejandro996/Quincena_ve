@@ -33,6 +33,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.abs
 import kotlin.math.min
@@ -100,6 +102,7 @@ fun Inicio(st: AppState) {
         }
     }
 
+    QuinciCard(st)
     DetectadosCard(st)
     QuickRow(st)
     SemanaCard(st)
@@ -401,15 +404,16 @@ fun Movimientos(st: AppState) {
     when (st.movSub) {
         "fijos" -> {
             QCard {
-                Items(d.arr("recurring"), "Aquí van los gastos que se repiten cada mes, como alquiler o internet. Se registran solos el día que indiques.") { r ->
+                Items(d.arr("recurring"), "Aquí van los gastos que se repiten cada mes, como alquiler o internet. Se registran solos el día que indiques o, si prefieres, los marcas al pagarlos.") { r ->
                     Column(Modifier.weight(1f)) {
                         B(r.str("description") ?: "Gasto fijo")
-                        Mut("${CATS[r.str("category")] ?: "Otros"} · el día ${r.num("day").toInt()} de cada mes${if (r.bool("active") == false) " · en pausa" else ""}")
+                        Mut("${CATS[r.str("category")] ?: "Otros"} · el día ${r.num("day").toInt()} de cada mes · ${if (r.str("mode") == "manual") "lo marcas al pagar" else "se anota solo"}${if (r.bool("active") == false) " · en pausa" else ""}")
                     }
                     Amt(f.orig(r.num("amount"), r.str("currency")))
                     Link("Editar", { st.open("editarr", r.id) })
                 }
             }
+            Mut("También los ves en Pagos › Compromisos, junto a los pagos únicos.")
             Btn("Agregar gasto fijo", { st.open("recurrente") })
         }
         "ingresos" -> IngresosView(st)
@@ -456,18 +460,7 @@ fun Deudas(st: AppState) {
         Chip("Me deben", st.deudasSub == "medeben") { st.deudasSub = "medeben" }
     }
     if (st.deudasSub == "medeben") { MeDebenView(st); return }
-    QCard {
-        B("Tu plan para salir de deudas")
-        if (plan.configured) {
-            when {
-                plan.months != null -> Rich("Si pagas ", f.show(plan.rec) to true, " al mes, terminas en ", meses(plan.months) to true,
-                    " (intereses estimados: ${f.show(plan.interest)}).")
-                plan.over -> Rich("Si pagas ", f.show(plan.rec) to true, " al mes. Tus cuotas mínimas superan lo que puedes pagar: revisa tus gastos o negocia plazos.")
-                else -> Rich("Si pagas ", f.show(plan.rec) to true, " al mes. Agrega el pago mínimo de cada deuda para calcular el plazo.")
-            }
-        } else Mut("Cuéntanos cuánto necesitas para vivir y te decimos cuánto puedes pagar sin ahogarte.")
-        Btn(if (plan.configured) "Ajustar plan" else "Crear mi plan", { st.open("plan") }, outline = true)
-    }
+    PlanCard(st, plan)
     QCard {
         Items(d.arr("debts"), "No tienes deudas registradas.") { x ->
             val amount = x.num("amount")
@@ -488,6 +481,85 @@ fun Deudas(st: AppState) {
     Btn("Agregar deuda", { st.open("deuda") })
 }
 
+private fun mesDe(n: Int): String = YearMonth.now().plusMonths(n.toLong()).let { monthName(it, true) }
+
+/** Próximo día de cobro (15 o fin de mes, o el día del sueldo mensual): ahí se programan los pagos del plan. */
+fun nextPayday(d: JsonObject): LocalDate {
+    val t = LocalDate.now()
+    val src = d.arr("incomeSources").firstOrNull { it.str("frequency") == "mensual" || it.str("frequency") == "quincenal" }
+    val ym = YearMonth.from(t)
+    val days = if (src?.str("frequency") == "mensual") listOf(((src["payDays"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonPrimitive)?.content?.toIntOrNull() ?: ym.lengthOfMonth())
+        else listOf(15, ym.lengthOfMonth())
+    val next = days.map { min(it, ym.lengthOfMonth()) }.sorted().firstOrNull { it >= t.dayOfMonth }
+    return if (next != null) ym.atDay(next) else ym.plusMonths(1).let { it.atDay(min(days[0], it.lengthOfMonth())) }
+}
+
+/** Plan de pagos: cuánto al mes y por quincena, orden con lo que toca a cada deuda, comparación y programar el mes. */
+@Composable
+fun PlanCard(st: AppState, plan: Plan) {
+    val d = st.repo.data
+    val f = st.fmt
+    val p = pal
+    QCard {
+        B("Tu plan para salir de deudas")
+        when {
+            !plan.configured -> {
+                Mut("Cuéntanos cuánto necesitas para vivir y te decimos cuánto puedes pagar cada quincena sin ahogarte, en qué orden y cuándo terminas.")
+                Btn("Crear mi plan", { st.open("plan") }); return@QCard
+            }
+            plan.over -> { Text("Tus cuotas mínimas (${f.show(plan.minT)} al mes) superan lo que puedes pagar (${f.show(plan.cap)}). Revisa tus gastos, sube tus ingresos o negocia plazos más largos.") }
+            plan.months == null -> Rich("Pagas ", f.show(plan.rec) to true, " al mes. Agrega el pago mínimo de cada deuda (Editar) para calcular el orden y cuándo terminas.")
+            else -> {
+                Big(meses(plan.months), 34.sp)
+                Mut("Terminas en ${mesDe(plan.months)} · intereses estimados ${f.show(plan.interest)}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Al mes" to plan.rec, "Por quincena" to plan.rec / 2).forEach { (k, v) ->
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(p.gs).padding(12.dp)) { Mut(k); B(f.show(v)) }
+                    }
+                }
+                val names = mapOf("avalanche" to "primero la de más interés", "snowball" to "primero la más pequeña")
+                B("Orden de pago · ${names[plan.strategy]}")
+                val open = d.arr("debts").filter { it.num("amount") - it.num("paid") > .005 }.sortedBy { plan.payoff[it.id] ?: 999 }
+                open.forEachIndexed { i, x ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(26.dp).clip(CircleShape).background(p.g), contentAlignment = Alignment.Center) { Text("${i + 1}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        Column(Modifier.weight(1f)) {
+                            B(x.str("entity") ?: "Deuda")
+                            Mut(plan.payoff[x.id]?.let { "La terminas en ${mesDe(it)}" } ?: "Más de 50 meses")
+                        }
+                        Column(horizontalAlignment = Alignment.End) { Amt(f.show(plan.first[x.id] ?: 0.0)); Text("este mes", fontSize = 12.sp, color = p.mut) }
+                    }
+                }
+                val alt = debtPlan(d, if (plan.strategy == "snowball") "avalanche" else "snowball")
+                alt.months?.let { am ->
+                    val better = alt.interest < plan.interest - .5 || (abs(alt.interest - plan.interest) <= .5 && am < plan.months)
+                    Mut("Si pagas ${names[alt.strategy]}: ${meses(am)} e intereses de ${f.show(alt.interest)}." + if (better) " Te conviene más." else " Tu plan actual es el mejor.")
+                    if (better) Link("Cambiar a ${names[alt.strategy]}", { st.act("Plan actualizado") { m -> m["debtPlan"] = JsonObject(m.data().obj("debtPlan") + ("strategy" to JsonPrimitive(alt.strategy))) } })
+                }
+                val ym = YearMonth.now().toString()
+                val planned = d.arr("plannedDebtPayments").any { it.str("status") == "planned" && it.bool("auto") == true && (it.str("scheduledDate") ?: "").startsWith(ym) }
+                if (planned) Mut("Ya programaste los pagos de este mes. Míralos en Pagos.")
+                else Btn("Programar los pagos de este mes", {
+                    val day = nextPayday(d)
+                    val list = open.filter { (plan.first[it.id] ?: 0.0) > .005 }
+                    val rate = rateOf(d)
+                    st.act("${list.size} ${if (list.size == 1) "pago programado" else "pagos programados"} para el ${shortDate(day)}") { m ->
+                        list.forEach { x ->
+                            val a = plan.first[x.id] ?: 0.0
+                            val amt = Math.round((if (x.str("currency") == "BS") a * rate else a) * 100) / 100.0
+                            m.setRows("plannedDebtPayments", m.rows("plannedDebtPayments") + row("id" to "pl${System.currentTimeMillis()}_${x.id}", "debtId" to x.id,
+                                "entity" to (x.str("entity") ?: ""), "description" to "Pago del plan", "amount" to amt, "currency" to (x.str("currency") ?: "USD"),
+                                "scheduleType" to "date", "scheduledDate" to day.toString(), "status" to "planned", "createdAt" to nowIso(), "paidAt" to "",
+                                "paymentChoice" to "custom", "auto" to true))
+                        }
+                    }
+                })
+            }
+        }
+        Btn(if (plan.configured) "Ajustar plan" else "Crear mi plan", { st.open("plan") }, outline = true)
+    }
+}
+
 // =====================================================================
 // PAGOS
 // =====================================================================
@@ -503,8 +575,32 @@ fun Pagos(st: AppState) {
         Chip("Compromisos", st.pagosSub == "compromisos") { st.pagosSub = "compromisos" }
     }
     if (st.pagosSub == "compromisos") {
+        // Cada mes: los mismos pagos fijos de Movimientos › Fijos, con su estado de este mes.
+        val ym = java.time.YearMonth.now()
         QCard {
-            Items(d.arr("schoolExpenses"), "Aquí van el colegio, el alquiler y otros pagos que repites.") { x ->
+            B("Cada mes")
+            Mut("Alquiler, internet, mensualidades… Son los mismos de Movimientos › Fijos.")
+            Items(d.arr("recurring").filter { it.bool("active") != false }.sortedBy { it.num("day") }, "No tienes pagos fijos.") { r ->
+                val paid = recPaid(d, r, ym)
+                val day = r.num("day").toInt()
+                Column(Modifier.weight(1f)) {
+                    B(r.str("description") ?: "Pago fijo")
+                    Mut(when {
+                        paid -> "Pagado este mes"
+                        r.str("mode") == "manual" -> if (day < LocalDate.now().dayOfMonth) "Venció el día $day" else "Vence el día $day"
+                        else -> "Se anota solo el día $day"
+                    })
+                }
+                Amt(f.orig(r.num("amount"), r.str("currency")))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Link("Editar", { st.open("editarr", r.id) })
+                    if (!paid && r.str("mode") == "manual") Btn("Pagar", { st.open("rpago", r.id) }, small = true)
+                }
+            }
+        }
+        QCard {
+            B("Pagos únicos")
+            Items(d.arr("schoolExpenses"), "Matrícula, útiles, uniformes y otros pagos que no se repiten.") { x ->
                 val left = schoolLeft(d, x)
                 Column(Modifier.weight(1f)) {
                     B(x.str("description") ?: "Compromiso")
@@ -519,7 +615,10 @@ fun Pagos(st: AppState) {
                 }
             }
         }
-        Btn("Agregar compromiso", { st.open("compromiso") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Btn("Pago fijo mensual", { st.open("recurrente") }, Modifier.weight(1f), outline = true)
+            Btn("Pago único", { st.open("compromiso") }, Modifier.weight(1f))
+        }
     } else {
         val ps = d.arr("plannedDebtPayments").filter { it.str("status") == "planned" }.sortedBy { it.str("scheduledDate") ?: "" }
         QCard {
@@ -580,6 +679,16 @@ fun Mas(st: AppState) {
 
     Head(st)
     BizMasCard(st)
+    QCard {
+        B("¿Primera vez aquí?")
+        Mut("Quinci te muestra paso a paso cómo dejar tu quincena lista.")
+        Btn("Ver el tutorial", { st.tour = 0 }, outline = true)
+    }
+    QCard {
+        B("¿Qué mejorarías?")
+        Mut("Cuéntanos qué te gustaría ver en Quincena VE o qué no funciona bien. Lo leemos todo.")
+        Btn("Enviar sugerencia", { st.open("sugerencia") }, outline = true)
+    }
     PaisMasCard(st)
     QCard {
         B("Avisos")
