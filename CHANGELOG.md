@@ -8,6 +8,10 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## Código: app.py dividido en módulos (rama mejoras/dividir-app)
+- Las rutas pasan a blueprints en `routes/`: `auth.py` (entrar, salir, passkeys, registro, correo y contraseña), `cuentas.py` (dispositivos, términos, correo, clave, eliminar cuenta), `gastos.py` (estado de la quincena, importar, países y tasa), `negocio.py` (vendedores y modo vendedor), `notificaciones.py` (avisos push) y `admin.py` (panel, usuarios, cobros Plus, Binance y sugerencias).
+- `app.py` queda como núcleo: configuración, modelos, seguridad (cabeceras, CSRF, sesiones, `require_auth`), correo, tasas, datos y páginas públicas. El código de cada ruta no cambió; las URLs, los métodos, los límites de intentos y las exenciones son idénticos.
+
 ## Android: cargas visibles y pagos mixtos
 - Barra fina arriba mientras la app habla con el servidor; los botones de entrar, crear cuenta y cambiar clave muestran una ruedita mientras trabajan.
 - Pagos mixtos al anotar un gasto: hasta 3 métodos con su monto, moneda y cuenta; en Movimientos se ve como un solo gasto con sus métodos.
