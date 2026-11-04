@@ -183,6 +183,15 @@ class User(db.Model):
     owner_id = db.Column(db.Integer, nullable=True, index=True)  # cuenta de vendedor: id del dueño del negocio
 
 
+class ProductLicense(db.Model):
+    """Licencia individual que activó el titular de esta cuenta."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    token = db.Column(db.Text, nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class SharedState(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Cada fila contiene los datos financieros privados de exactamente una cuenta.
@@ -492,6 +501,66 @@ def csrf_ok() -> bool:
     return bool(token and supplied and hmac.compare_digest(token, supplied))
 
 
+_PRODUCT_LICENSE_KEY_CACHE = {"key": "", "until": 0.0}
+_PRODUCT_LICENSE_KEY_LOCK = threading.Lock()
+
+
+def product_license_public_key() -> str:
+    key = os.getenv("PRODUCT_LICENSE_PUBLIC_KEY", "").strip()
+    if key:
+        return key
+    with _PRODUCT_LICENSE_KEY_LOCK:
+        if _PRODUCT_LICENSE_KEY_CACHE["until"] > time.monotonic():
+            return _PRODUCT_LICENSE_KEY_CACHE["key"]
+        server = os.getenv("PRODUCT_LICENSE_SERVER_URL", "https://erp-licencias.onrender.com").strip().rstrip("/")
+        with urllib.request.urlopen(server + "/v1/clave-publica", timeout=5) as response:
+            payload = json.loads(response.read(4096))
+        key = str(payload.get("ed25519", "")).strip()
+        if not key:
+            raise ValueError("El Maestro no publicó su clave de verificación.")
+        _PRODUCT_LICENSE_KEY_CACHE.update(key=key, until=time.monotonic() + 300)
+        return key
+
+
+def verify_product_license(token: str, user: User) -> tuple[dict | None, str | None]:
+    """Comprueba licencia individual emitida y firmada por el Maestro de ERP."""
+    try:
+        encoded, signature = token.strip().split(".", 1)
+        decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        payload = decode(encoded)
+        claims = json.loads(payload)
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        Ed25519PublicKey.from_public_bytes(decode(product_license_public_key())).verify(decode(signature), payload)
+        expires = int(claims.get("exp", 0))
+        if claims.get("producto") != "control_financiero" or claims.get("tipo_sujeto") != "cuenta":
+            return None, "license_product_mismatch"
+        if claims.get("estado") != "activa" or expires <= int(time.time()):
+            return None, "license_expired_or_inactive"
+        if int((claims.get("limites") or {}).get("max_usuarios", 1)) != 1:
+            return None, "license_account_limit_mismatch"
+        email = (user.email or "").strip().casefold()
+        subject = str(claims.get("sujeto", "")).strip().casefold()
+        if not email or not user.email_verified_at or subject != email:
+            return None, "license_subject_mismatch"
+        expected = os.getenv("PRODUCT_LICENSE_SUBJECT", "").strip().casefold()
+        if expected and expected != email:
+            return None, "license_subject_mismatch"
+        return claims, None
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return None, "license_verification_unavailable"
+    except Exception:
+        return None, "invalid_license"
+
+
+def license_required() -> bool:
+    return os.getenv("CONTROL_FINANCIERO_LICENSE_ENFORCE", "0").strip().lower() in {"1", "true", "yes"}
+
+
+def license_for_user(user: User) -> tuple[dict | None, str | None]:
+    row = ProductLicense.query.filter_by(user_id=user.id).first()
+    return verify_product_license(row.token, user) if row else (None, "license_missing")
+
+
 def is_plus(user: "User") -> bool:
     """Negocio Plus activo: lo activa un administrador (tras el pago) y puede tener fecha de vencimiento."""
     if not user or (user.plan or "free") != "plus":
@@ -524,6 +593,10 @@ def require_auth(admin: bool = False, allow_password_change: bool = False):
                 return jsonify(error="Esta acción requiere permisos de administrador."), 403
             if user.must_change_password and not allow_password_change:
                 return jsonify(error="Debes cambiar tu contraseña antes de continuar.", code="password_change_required"), 428
+            if license_required() and not request.path.startswith("/api/license"):
+                claims, code = license_for_user(user)
+                if not claims:
+                    return jsonify(error="Activa una licencia para esta cuenta de Control financiero.", code=code), 402
             if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not getattr(g, "via_token", False) and not csrf_ok():
                 return jsonify(error="Token de seguridad vencido. Actualiza la página e inicia sesión nuevamente."), 403
             g.user = user
@@ -1387,6 +1460,45 @@ def healthz():
     except Exception:
         app.logger.exception("Health check de base de datos falló")
         return jsonify(ok=False), 503
+
+
+@app.get("/api/license/status")
+@require_auth(allow_password_change=True)
+def product_license_status():
+    claims, code = license_for_user(g.user)
+    return jsonify(active=bool(claims), required=license_required(), code=code,
+                   product="control_financiero", expires_at=claims.get("exp") if claims else None)
+
+
+@app.post("/api/license/activate")
+@require_auth(allow_password_change=True)
+@limiter.limit("10 per hour")
+def activate_product_license():
+    token = str((request.get_json(silent=True) or {}).get("token", "")).strip()
+    if not token or len(token) > 32768:
+        return jsonify(error="Pega el archivo de licencia completo.", code="invalid_license_format"), 400
+    claims, code = verify_product_license(token, g.user)
+    if not claims:
+        return jsonify(error="La licencia no es válida para esta cuenta verificada.", code=code), 400
+    expires = datetime.fromtimestamp(int(claims["exp"]), timezone.utc)
+    row = ProductLicense.query.filter_by(user_id=g.user.id).first()
+    if row is None:
+        row = ProductLicense(user_id=g.user.id, token=token, expires_at=expires)
+        db.session.add(row)
+    else:
+        row.token, row.expires_at = token, expires
+    db.session.commit()
+    audit("product_license_activated", f"Control financiero hasta {expires.date().isoformat()}", g.user.id)
+    return jsonify(ok=True, active=True, expires_at=expires.isoformat())
+
+
+@app.delete("/api/license")
+@require_auth(allow_password_change=True)
+def remove_product_license():
+    ProductLicense.query.filter_by(user_id=g.user.id).delete()
+    db.session.commit()
+    audit("product_license_removed", "Licencia de Control financiero eliminada", g.user.id)
+    return jsonify(ok=True)
 
 
 @app.get("/api/status")
@@ -2597,6 +2709,7 @@ def delete_account():
     PushSubscription.query.filter_by(user_id=uid).delete()
     User.query.filter_by(owner_id=uid).update({"active": False})
     ReminderDelivery.query.filter_by(user_id=uid).delete()
+    ProductLicense.query.filter_by(user_id=uid).delete()
     Suggestion.query.filter_by(user_id=uid).update({"user_id": None})
     SharedState.query.filter_by(user_id=uid).delete()
     SharedState.query.filter_by(updated_by=uid).update({"updated_by": None})
