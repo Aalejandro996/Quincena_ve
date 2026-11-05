@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: control-financiero
+    name: Quincena_ve
     runtime: python
     plan: free  # En el plan gratis Render bloquea SMTP: los correos salen por la API HTTPS de Brevo
     region: ohio
