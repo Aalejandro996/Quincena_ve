@@ -164,8 +164,9 @@ private fun DrawScope.confetti(k: Float) {
     drawCircle(Color(0xFFCF142B), 2.5f * k, Offset(14 * k, 36 * k))
 }
 
-data class QNow(val mood: String, val prop: String, val label: String, val text: String, val btn: String? = null, val go: ((AppState) -> Unit)? = null,
-                val calm: Boolean = false)
+// «calm» va antes de «go» para que la lambda final de QNow(...) { … } siga siendo la acción del botón.
+data class QNow(val mood: String, val prop: String, val label: String, val text: String, val btn: String? = null, val calm: Boolean = false,
+                val go: ((AppState) -> Unit)? = null)
 
 /** Consejos de Quinci (igual que la web): (texto para Venezuela, texto neutro). Uno por día; «Otro consejo» pasa al siguiente. */
 val QTIPS = listOf(
