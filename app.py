@@ -719,7 +719,7 @@ def normalize_shared_data(value) -> dict:
             # Keep the existing app's record fields, but discard nested values / very long payloads.
             clean = {}
             for field, field_value in row.items():
-                if field not in {"id", "amount", "paid", "currency", "category", "description", "method", "bank", "date", "type", "entity", "minPayment", "cutDate", "payBefore", "installments", "invoice", "interestRate", "interestPeriod", "interestKnown", "rateType", "rateUsed", "bcvRate", "marketRate", "accountId", "groupId"}:
+                if field not in {"id", "amount", "paid", "currency", "category", "description", "method", "bank", "date", "type", "entity", "issuer", "creditLimit", "minPayment", "cutDate", "payBefore", "installments", "invoice", "interestRate", "interestPeriod", "interestKnown", "rateType", "rateUsed", "bcvRate", "marketRate", "accountId", "groupId"}:
                     continue
                 if isinstance(field_value, (str, int, float, bool)) or field_value is None:
                     if isinstance(field_value, str):
@@ -788,6 +788,13 @@ def normalize_shared_data(value) -> dict:
                 clean["interestKnown"] = bool(row.get("interestKnown", float(clean["interestRate"] or 0) > 0))
                 clean["cutDate"] = str(row.get("cutDate") or "")[:20]
                 clean["payBefore"] = str(row.get("payBefore") or "")[:40]
+                clean["issuer"] = str(row.get("issuer") or "")[:80]
+                try:
+                    clean["creditLimit"] = max(0.0, min(float(row.get("creditLimit") or 0), 1_000_000_000_000))
+                except (TypeError, ValueError, OverflowError):
+                    clean["creditLimit"] = 0.0
+                if not math.isfinite(clean["creditLimit"]):
+                    clean["creditLimit"] = 0.0
             clean_rows.append(clean)
         result[key] = clean_rows
 
@@ -1038,6 +1045,52 @@ def validate_school_balances(data: dict) -> str | None:
     for expense_id, total_paid in paid_by_expense.items():
         if total_paid > float(expenses[expense_id]["amount"]) + 0.01:
             return "El total de pagos supera el monto registrado para uno de los gastos escolares. Revisa el saldo antes de guardar."
+    return None
+
+
+def validate_account_balances(data: dict, previous: dict | None = None) -> str | None:
+    """Reject new transactions that make a cash account's recorded balance negative."""
+    rate = float(data.get("exchangeRate") or 1)
+    def amount_in(value: float, source: str, target: str) -> float:
+        if source == target:
+            return value
+        return value * rate if source == "USD" and target == "BS" else value / rate if source == "BS" and target == "USD" else value
+    def balances(state: dict) -> dict[str, float]:
+        result = {}
+        for account in state.get("accounts", []):
+            aid, currency = str(account.get("id") or ""), account.get("currency", "USD")
+            if not aid:
+                continue
+            total = float(account.get("initial") or 0)
+            for row in state.get("incomes", []):
+                if str(row.get("accountId") or "") == aid:
+                    total += amount_in(float(row.get("amount") or 0), row.get("currency", "USD"), currency)
+            for collection in ("expenses", "receivables"):
+                for row in state.get(collection, []):
+                    if str(row.get("accountId") or "") == aid:
+                        total -= amount_in(float(row.get("amount") or 0), row.get("currency", "USD"), currency)
+            for row in state.get("transfers", []):
+                if str(row.get("fromId") or "") == aid:
+                    total -= float(row.get("amountFrom") or 0)
+                if str(row.get("toId") or "") == aid:
+                    total += float(row.get("amountTo") or 0)
+            for row in state.get("sales", []):
+                if str(row.get("accountId") or "") == aid and not row.get("credit"):
+                    total += amount_in(float(row.get("amount") or 0), row.get("currency", "USD"), currency)
+            for row in state.get("bizPayments", []):
+                if str(row.get("accountId") or "") == aid:
+                    total += amount_in(float(row.get("amount") or 0), row.get("currency", "USD"), currency)
+            for row in state.get("bizExpenses", []):
+                if str(row.get("accountId") or "") == aid:
+                    total -= amount_in(float(row.get("amount") or 0), row.get("currency", "USD"), currency)
+            result[aid] = total
+        return result
+    old = balances(previous or {})
+    new = balances(data)
+    labels = {str(a.get("id")): str(a.get("name") or "Cuenta") for a in data.get("accounts", [])}
+    for aid, balance in new.items():
+        if balance < -0.01 and balance < old.get(aid, 0.0) - 0.01:
+            return f"La cuenta «{labels.get(aid, 'Cuenta')}» no tiene saldo suficiente para ese movimiento. Revisa el saldo y vuelve a intentar."
     return None
 
 

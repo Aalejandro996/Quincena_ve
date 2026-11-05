@@ -349,6 +349,13 @@ fun dueIn(d: JsonObject, from: LocalDate, to: LocalDate, withFixed: Boolean = tr
     for (p in d.arr("plannedDebtPayments")) if (p.str("status") == "planned" && inRange(p.str("scheduledDate"), from, to)) {
         due += usdOf(d, p.num("amount"), p.str("currency"))
     }
+    for (card in d.arr("debts")) if (card.str("type") == "tdc" && card.num("minPayment") > 0) {
+        val month = YearMonth.from(from)
+        val day = localDay(card.str("payBefore"))?.dayOfMonth ?: continue
+        val dueDate = month.atDay(day.coerceAtMost(month.lengthOfMonth()))
+        val hasScheduled = d.arr("plannedDebtPayments").any { it.str("debtId") == card.id && it.str("status") == "planned" && inRange(it.str("scheduledDate"), month.atDay(1), month.atEndOfMonth()) }
+        if (!hasScheduled && !dueDate.isBefore(from) && !dueDate.isAfter(to)) due += usdOf(d, card.num("minPayment"), card.str("currency"))
+    }
     for (x in d.arr("schoolExpenses")) if (inRange(x.str("dueDate"), from, to)) {
         due += usdOf(d, schoolLeft(d, x), x.str("currency"))
     }

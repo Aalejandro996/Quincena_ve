@@ -58,9 +58,11 @@ fun QuinciFace(mood: String, prop: String = "", label: String = "", size: Dp = 8
     val tm = rememberTextMeasurer()
     val t = rememberInfiniteTransition(label = "quinci")
     val bob by t.animateFloat(0f, 1f, infiniteRepeatable(tween(if (mood == "celebra") 900 else 1600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "bob")
+    val pulse by t.animateFloat(.97f, 1.035f, infiniteRepeatable(tween(if (mood == "celebra") 720 else 2100, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
     val dy = if (mood == "celebra") -8f * bob else -4f * bob
-    val tilt = if (mood == "preocupado" || mood == "alerta") (bob - .5f) * 6f else 0f
-    Canvas(Modifier.size(size).graphicsLayer { translationY = dy * density; rotationZ = tilt }) {
+    val tilt = when (mood) { "preocupado", "alerta" -> (bob - .5f) * 7f; "pensando" -> (bob - .5f) * 4f; "celebra" -> (bob - .5f) * 5f; else -> 0f }
+    val scale = if (mood == "celebra" || mood == "alerta") pulse else 1f
+    Canvas(Modifier.size(size).graphicsLayer { translationY = dy * density; rotationZ = tilt; scaleX = scale; scaleY = scale }) {
         val k = this.size.width / 120f
         fun o(x: Float, y: Float) = Offset(x * k, y * k)
         fun quad(path: Path, x0: Float, y0: Float, cx: Float, cy: Float, x1: Float, y1: Float) { path.moveTo(x0 * k, y0 * k); path.quadraticBezierTo(cx * k, cy * k, x1 * k, y1 * k) }

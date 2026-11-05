@@ -90,6 +90,21 @@ fun accBalance(d: JsonObject, a: JsonObject): Double {
     return b + bizAccFlow(d, a)
 }
 
+/** Comprueba que los gastos y movimientos no dejen negativa una cuenta seleccionada. */
+fun accountSpendError(d: JsonObject, parts: List<Triple<String, Double, String>>, excludeId: String? = null): String? {
+    val grouped = parts.filter { it.first.isNotBlank() && it.second > 0 }.groupBy { it.first }
+    for ((id, rows) in grouped) {
+        val a = accById(d, id) ?: continue
+        var available = accBalance(d, a)
+        if (!excludeId.isNullOrBlank()) d.arr("expenses").firstOrNull { it.id == excludeId && it.str("accountId") == id }?.let {
+            available += conv(d, it.num("amount"), it.str("currency"), a.str("currency"))
+        }
+        val needed = rows.sumOf { conv(d, it.second, it.third, a.str("currency")) }
+        if (needed > available + .005) return "La cuenta «${a.str("name") ?: "Cuenta"}» no tiene saldo suficiente. Disponible: ${Fmt(false, false, 1.0).orig(max(0.0, available), a.str("currency"))}."
+    }
+    return null
+}
+
 fun totalUsd(d: JsonObject) = accounts(d).sumOf { usdOf(d, accBalance(d, it), it.str("currency")) }
 
 /** Saldo en bolívares de las cuentas en Bs. (null si no hay cuentas en Bs.). */
@@ -150,6 +165,12 @@ fun calEvents(d: JsonObject, ym: YearMonth, f: Fmt): Map<Int, List<CalEv>> {
     fun inMonth(s: String?) = dateOf(s)?.takeIf { YearMonth.from(it) == ym }
     for (p in d.arr("plannedDebtPayments")) if (p.str("status") == "planned") inMonth(p.str("scheduledDate"))?.let {
         add(it.dayOfMonth, "${p.str("entity")?.takeIf { e -> e.isNotBlank() } ?: p.str("description") ?: "Pago"} · ${f.orig(p.num("amount"), p.str("currency"))}", "pago")
+    }
+    for (card in d.arr("debts")) if (card.str("type") == "tdc" && card.num("minPayment") > 0) {
+        val date = card.str("payBefore")?.take(10)
+        val hasScheduled = d.arr("plannedDebtPayments").any { it.str("debtId") == card.id && it.str("status") == "planned" && (it.str("scheduledDate") ?: "").startsWith(ym.toString()) }
+        val day = date?.takeLast(2)?.toIntOrNull()
+        if (day != null && !hasScheduled) add(min(day, last), "${card.str("issuer")?.takeIf { it.isNotBlank() } ?: card.str("entity") ?: "Tarjeta"} · mínimo ${f.orig(card.num("minPayment"), card.str("currency"))}", "pago")
     }
     for (x in d.arr("schoolExpenses")) inMonth(x.str("dueDate"))?.let {
         val left = schoolLeft(d, x)
@@ -229,6 +250,21 @@ fun CuentasView(st: AppState) {
             Btn("Agregar cuenta", { st.open("cuenta") }, Modifier.weight(1f), small = true, outline = true, full = false)
             if (accs.size > 1) Btn("Mover o cambiar", { st.open("transfer") }, Modifier.weight(1f), small = true, full = false)
         }
+    }
+    val cards = d.arr("debts").filter { it.str("type") == "tdc" }
+    QCard {
+        B("Tarjetas de crédito")
+        Items(cards, "Registra el saldo y las fechas que aparecen en el estado de cuenta. Se incluyen en Deudas y en el plan de pagos.") { card ->
+            val used = max(0.0, card.num("amount") - card.num("paid"))
+            val limit = card.num("creditLimit")
+            Column(Modifier.weight(1f)) {
+                B(card.str("issuer")?.takeIf { it.isNotBlank() } ?: card.str("entity") ?: "Tarjeta")
+                Mut("Usado ${f.orig(used, card.str("currency"))}" + if (limit > 0) " · disponible ${f.orig(max(0.0, limit - used), card.str("currency"))}" else "")
+                Mut(listOfNotNull(card.str("cutDate")?.takeIf { it.isNotBlank() }?.let { "Corte ${it.take(10)}" }, card.str("payBefore")?.takeIf { it.isNotBlank() }?.let { "Pago antes de ${it.take(10)}" }).joinToString(" · "))
+            }
+            Link("Editar", { st.open("editard", card.id) })
+        }
+        Btn("Agregar tarjeta", { st.open("deuda", "tdc") }, small = true, outline = true, full = true)
     }
     val tr = d.arr("transfers").sortedByDescending { it.str("date") ?: "" }.take(20)
     if (tr.isNotEmpty()) QCard {

@@ -107,6 +107,17 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                 val date = dateOf(p.str("scheduledDate")) ?: continue
                 items += Due("debt_${p.id}_$date", p.str("entity") ?: p.str("description") ?: "Pago de deuda", f.orig(p.num("amount"), p.str("currency")), daysUntil(date))
             }
+            for (card in d.arr("debts")) if (card.str("type") == "tdc" && card.num("minPayment") > 0) {
+                val statement = dateOf(card.str("payBefore")) ?: continue
+                val ym = java.time.YearMonth.from(today)
+                var due = ym.atDay(statement.dayOfMonth.coerceAtMost(ym.lengthOfMonth()))
+                if (due.isBefore(today)) {
+                    val next = ym.plusMonths(1)
+                    due = next.atDay(statement.dayOfMonth.coerceAtMost(next.lengthOfMonth()))
+                }
+                val scheduled = d.arr("plannedDebtPayments").any { it.str("debtId") == card.id && it.str("status") == "planned" && (it.str("scheduledDate") ?: "").startsWith(ym.toString()) }
+                if (!scheduled) items += Due("card_${card.id}_$due", "Pago de tarjeta: ${card.str("issuer") ?: card.str("entity") ?: "Tarjeta"}", f.orig(card.num("minPayment"), card.str("currency")), daysUntil(due))
+            }
             for (x in d.arr("schoolExpenses")) {
                 val date = dateOf(x.str("dueDate")) ?: continue
                 val left = schoolLeft(d, x)

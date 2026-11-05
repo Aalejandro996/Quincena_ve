@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlin.math.min
 
 // Formularios de la 1.6 (los mismos de la web).
@@ -96,25 +97,41 @@ fun CuentaForm(st: AppState, id: String?) {
     var kind by remember { mutableStateOf(a?.str("kind") ?: "banco") }
     var cur by remember { mutableStateOf(if (a?.str("currency") == "BS") "BS" else "USD") }
     var amount by remember { mutableStateOf(if (a != null) inputMoney(Math.round(accBalance(d, a) * 100) / 100.0) else "") }
+    var adjustmentDate by remember { mutableStateOf(LocalDate.now().toString()) }
     Title16(if (a == null) "Nueva cuenta" else "Editar cuenta")
     Field("Nombre", name, { name = it }, placeholder = "Banesco, Efectivo, Binance…")
     Select("Tipo", ACC_KINDS.toList(), kind) { kind = it }
     if (a == null) CurrencySelect(cur) { cur = it }
     MoneyField(if (a == null) "¿Cuánto tienes hoy?" else "Saldo actual (${if (cur == "BS") "Bs." else "$"})", amount) { amount = it }
-    Mut(if (a == null) "Para USDT usa Dólares: se cuenta 1 a 1." else "Si el saldo no coincide con tu banco, escríbelo aquí y lo ajustamos.")
+    if (a == null) Mut("Para USDT usa Dólares: se cuenta 1 a 1.") else {
+        DateField("Fecha del ajuste", adjustmentDate, { adjustmentDate = it })
+        Mut("La diferencia se registra como ingreso o gasto en esta cuenta.")
+    }
     if (a != null) OutlineDanger("Quitar esta cuenta") {
         st.close(); st.act("Cuenta quitada", undo = true) { m -> m.updateRow("accounts", a.id) { it.plusFields("archived" to true) } }
     }
     Footer16(st, {
         if (name.isBlank()) return@Footer16 st.toast("Escribe un nombre para la cuenta.")
         val want = parseMoney(amount)
+        val parsedAdjustmentDate = dateOf(adjustmentDate)
+        if (a != null && (parsedAdjustmentDate == null || parsedAdjustmentDate.isAfter(LocalDate.now())))
+            return@Footer16 st.toast("Elige una fecha válida, de hoy o anterior.")
+        val delta = if (a != null && want != null) want - accBalance(d, a) else 0.0
+        if (a != null && delta < -.005 && -delta > accBalance(d, a) + .005)
+            return@Footer16 st.toast("El saldo no alcanza para registrar esta disminución como gasto.")
         st.close()
         st.act("Guardado") { m ->
             if (a == null) m.setRows("accounts", m.rows("accounts") + row("id" to newId(), "name" to name.trim(), "kind" to kind, "currency" to cur,
                 "initial" to (want ?: 0.0), "archived" to false))
             else m.updateRow("accounts", a.id) {
-                val r = it.plusFields("name" to name.trim(), "kind" to kind)
-                if (want != null) r.plusFields("initial" to it.num("initial") + (want - accBalance(m.data(), it))) else r
+                it.plusFields("name" to name.trim(), "kind" to kind)
+            }
+            if (a != null && abs(delta) > .005) {
+                val id = newId()
+                if (delta > 0) m.addFirst("incomes", row("id" to id, "date" to adjustmentDate, "amount" to delta, "currency" to cur,
+                    "name" to "Ajuste de saldo: ${name.trim()}", "sourceId" to "", "accountId" to a.id, "kind" to "extra"))
+                else m.addFirst("expenses", row("id" to id, "amount" to -delta, "currency" to cur, "category" to "fijo", "description" to "Ajuste de saldo: ${name.trim()}",
+                    "method" to "banco", "bank" to "", "date" to adjustmentDate, "accountId" to a.id))
             }
         }
     })
@@ -145,6 +162,7 @@ fun TransferForm(st: AppState) {
     Footer16(st, {
         val a = pos16(amount) ?: return@Footer16 st.bad16()
         if (from == to || fa == null || ta == null) return@Footer16 st.toast("Elige dos cuentas distintas.")
+        if (a > accBalance(d, fa) + .005) return@Footer16 st.toast("La cuenta «${fa.str("name") ?: "Cuenta"}» no tiene saldo suficiente para mover ese monto.")
         val t = pos16(amountTo)
         st.close()
         st.act("Guardado") { m ->

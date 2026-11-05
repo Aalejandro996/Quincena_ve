@@ -143,6 +143,7 @@ fun GastoForm(st: AppState, id: String?) {
         if (mixed) {
             val parts = (0..2).mapNotNull { j -> parseMoney(ma[j])?.takeIf { it > 0 }?.let { j to it } }
             if (parts.size < 2) return@Footer st.toast("Escribe al menos dos montos para dividir el pago.")
+            accountSpendError(st.repo.data, parts.map { (j, a) -> Triple(macc[j], a, mc[j]) })?.let { return@Footer st.toast(it) }
             if (chosen.isAfter(LocalDate.now())) return@Footer st.toast("La fecha no puede ser futura.")
             val iso = if (chosen == LocalDate.now()) nowIso() else chosen.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
             val gid = newId()
@@ -161,6 +162,7 @@ fun GastoForm(st: AppState, id: String?) {
         }
         val a = pos(amount) ?: return@Footer st.badAmount()
         if (chosen.isAfter(LocalDate.now())) return@Footer st.toast("La fecha no puede ser futura.")
+        accountSpendError(st.repo.data, listOf(Triple(acc, a, cur)), e?.id)?.let { return@Footer st.toast(it) }
         // Hoy guarda la hora real; otro día, el mediodía de ese día.
         val iso = if (chosen == LocalDate.now()) nowIso() else chosen.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
         val moved = e != null && day != origDay
@@ -251,6 +253,7 @@ fun IngresoForm(st: AppState, id: String?) {
 @Composable
 fun DeudaForm(st: AppState, id: String?) {
     val x = st.repo.data.arr("debts").firstOrNull { it.id == id }
+    var type by remember { mutableStateOf(x?.str("type") ?: if (id == "tdc") "tdc" else "otro") }
     var entity by remember { mutableStateOf(x?.str("entity") ?: "") }
     var amount by remember { mutableStateOf(inputMoney(x?.num("amount"))) }
     var cur by remember { mutableStateOf(x?.str("currency") ?: "USD") }
@@ -258,12 +261,21 @@ fun DeudaForm(st: AppState, id: String?) {
     var desc by remember { mutableStateOf(x?.str("description") ?: "") }
     var minPay by remember { mutableStateOf(inputMoney(x?.num("minPayment"))) }
     var rate by remember { mutableStateOf(inputMoney(x?.num("interestRate"))) }
-    SheetTitle(if (x == null) "Nueva deuda" else "Editar deuda")
+    var issuer by remember { mutableStateOf(x?.str("issuer") ?: "") }
+    var creditLimit by remember { mutableStateOf(inputMoney(x?.num("creditLimit"))) }
+    var cutDate by remember { mutableStateOf(x?.str("cutDate")?.take(10) ?: "") }
+    var payBefore by remember { mutableStateOf(x?.str("payBefore")?.take(10) ?: "") }
+    SheetTitle(if (x == null) "Nueva deuda o tarjeta" else "Editar deuda o tarjeta")
+    Select("Tipo", listOf("otro" to "Otra deuda", "tdc" to "Tarjeta de crédito"), type) { type = it }
     Field("¿A quién le debes?", entity, { entity = it })
     MoneyField("Monto total", amount) { amount = it }
     CurrencySelect(cur) { cur = it }
     if (x != null) MoneyField("Ya pagado", paid) { paid = it }
     Field("Detalle (opcional)", desc, { desc = it })
+    Field("Banco emisor", issuer, { issuer = it }, placeholder = "Nombre del banco")
+    MoneyField("Límite de crédito (opcional)", creditLimit) { creditLimit = it }
+    DateField("Fecha de corte", cutDate, { cutDate = it }, optional = true)
+    DateField("Fecha tope de pago", payBefore, { payBefore = it }, optional = true)
     MoneyField("Pago mínimo al mes (opcional)", minPay) { minPay = it }
     Field("Interés mensual % (si lo sabes)", rate, { rate = it }, kind = KeyboardType.Decimal)
     if (x != null) OutlineDanger("Eliminar esta deuda") {
@@ -284,12 +296,13 @@ fun DeudaForm(st: AppState, id: String?) {
                 if (ir != null) arrayOf("interestRate" to ir, "interestKnown" to true, "interestPeriod" to "mensual")
                 else arrayOf("interestRate" to null, "interestKnown" to false)
             if (x == null) {
-                val r = row("id" to newId(), "type" to "otro", "amount" to a, "currency" to cur, "entity" to entity.trim(), "description" to desc.trim(),
-                    "paid" to 0, "date" to nowIso(), "minPayment" to mp)
+                val r = row("id" to newId(), "type" to type, "amount" to a, "currency" to cur, "entity" to entity.trim(), "description" to desc.trim(),
+                    "paid" to 0, "date" to nowIso(), "minPayment" to mp, "issuer" to issuer.trim(), "creditLimit" to (pos(creditLimit) ?: 0.0), "cutDate" to cutDate, "payBefore" to payBefore)
                 m.addFirst("debts", r.plusFields(*interest))
             } else m.updateRow("debts", x.id) {
-                it.plusFields("entity" to entity.trim(), "description" to desc.trim(), "amount" to a, "currency" to cur,
-                    "paid" to min(a, max(0.0, parseMoney(paid) ?: 0.0)), "minPayment" to mp, *interest)
+                it.plusFields("type" to type, "entity" to entity.trim(), "description" to desc.trim(), "amount" to a, "currency" to cur,
+                    "paid" to min(a, max(0.0, parseMoney(paid) ?: 0.0)), "minPayment" to mp, "issuer" to issuer.trim(), "creditLimit" to (pos(creditLimit) ?: 0.0),
+                    "cutDate" to cutDate, "payBefore" to payBefore, *interest)
             }
         }
     })

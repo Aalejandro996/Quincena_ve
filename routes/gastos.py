@@ -11,7 +11,7 @@ import app as core
 from app import (  # noqa: E402
     COUNTRIES, DEFAULT_COUNTRY, DEFAULT_SHARED_DATA, SharedState, app, audit,
     clean_country, db, ensure_user_state, limiter, normalize_shared_data, require_auth,
-    three_way_merge, validate_school_balances,
+    three_way_merge, validate_account_balances, validate_school_balances,
 )
 
 bp = Blueprint("gastos", __name__)
@@ -58,6 +58,10 @@ def put_state():
     if school_error:
         db.session.rollback()
         return jsonify(error=school_error), 400
+    account_error = validate_account_balances(merged, current)
+    if account_error:
+        db.session.rollback()
+        return jsonify(error=account_error), 400
     record.data = merged
     record.revision += 1
     record.updated_at = datetime.now(timezone.utc)
@@ -85,6 +89,10 @@ def import_legacy_state():
     if school_error:
         db.session.rollback()
         return jsonify(error=school_error), 400
+    account_error = validate_account_balances(incoming, current)
+    if account_error:
+        db.session.rollback()
+        return jsonify(error=account_error), 400
     financially_empty = (
         not current["expenses"] and not current["debts"] and not current["incomeSources"] and
         not current["schoolExpenses"] and not current["schoolPayments"] and not current["plannedDebtPayments"] and

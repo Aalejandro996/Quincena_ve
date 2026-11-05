@@ -26,14 +26,14 @@ function quinciSvg(mood = 'feliz', prop = '', label = '', size = 96) {
   const props = {
     cartera: `<g transform="rotate(-8 104 88)"><rect x="82" y="74" width="40" height="28" rx="6" fill="#6B3F1D"/><rect x="82" y="74" width="40" height="9" rx="4" fill="#8A5428"/><circle cx="114" cy="90" r="3" fill="#E7C27A"/><text x="101" y="94" font-size="7.5" font-family="Figtree,Arial" font-weight="700" fill="#FFE9C2" text-anchor="middle">${short}</text></g>`,
     calendario: `<g><rect x="90" y="70" width="28" height="28" rx="5" fill="#fff" stroke="#D5DDD7" stroke-width="1.5"/><rect x="90" y="70" width="28" height="9" rx="4" fill="#CF142B"/><text x="104" y="94" font-size="12" font-family="Figtree,Arial" font-weight="800" fill="#12211B" text-anchor="middle">${short || '!'}</text></g>`,
-    confeti: '<g><rect x="12" y="12" width="6" height="3" rx="1" fill="#FFCC00" transform="rotate(25 15 13)"/><rect x="100" y="10" width="6" height="3" rx="1" fill="#00247D" transform="rotate(-30 103 11)"/><rect x="20" y="96" width="6" height="3" rx="1" fill="#CF142B" transform="rotate(40 23 97)"/><circle cx="106" cy="30" r="2.5" fill="#12936A"/><circle cx="14" cy="36" r="2.5" fill="#CF142B"/><rect x="96" y="100" width="6" height="3" rx="1" fill="#FFCC00" transform="rotate(-20 99 101)"/></g>',
+    confeti: '<g class="q-confetti"><rect x="12" y="12" width="6" height="3" rx="1" fill="#FFCC00" transform="rotate(25 15 13)"/><rect x="100" y="10" width="6" height="3" rx="1" fill="#00247D" transform="rotate(-30 103 11)"/><rect x="20" y="96" width="6" height="3" rx="1" fill="#CF142B" transform="rotate(40 23 97)"/><circle cx="106" cy="30" r="2.5" fill="#12936A"/><circle cx="14" cy="36" r="2.5" fill="#CF142B"/><rect x="96" y="100" width="6" height="3" rx="1" fill="#FFCC00" transform="rotate(-20 99 101)"/></g>',
     lupa: '<g><circle cx="104" cy="84" r="9" fill="#E3F1EA" stroke="#46564E" stroke-width="3"/><path d="M110 91l7 8" stroke="#46564E" stroke-width="4" stroke-linecap="round"/></g>',
   }[prop] || '';
   const sweat = m === 'preocupado' ? '<path d="M86 40q4 7 0 9q-4-2 0-9z" fill="#7CC6F2"/>' : '';
   return `<svg class="quinci q-${m}" width="${size}" height="${size}" viewBox="0 0 120 120" role="img" aria-label="Quinci, la mascota de Quincena VE">
 <defs><radialGradient id="qg" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#FFE27A"/><stop offset=".6" stop-color="#FFC530"/><stop offset="1" stop-color="#E9A100"/></radialGradient></defs>
 <ellipse cx="60" cy="112" rx="28" ry="4.5" fill="#0B6B4D" opacity=".15"/>
-<path d="M60 22q-2-10 6-16q10 2 8 12q-6 6-14 4z" fill="#12936A"/><path d="M61 21q4-6 9-11" stroke="#0B6B4D" stroke-width="1.6" fill="none"/>
+<path class="q-leaf" d="M60 22q-2-10 6-16q10 2 8 12q-6 6-14 4z" fill="#12936A"/><path class="q-leaf-vein" d="M61 21q4-6 9-11" stroke="#0B6B4D" stroke-width="1.6" fill="none"/>
 ${arms}<circle cx="60" cy="62" r="40" fill="url(#qg)" stroke="#C98A00" stroke-width="2.5"/><circle cx="60" cy="62" r="33" fill="none" stroke="#FFE9A0" stroke-width="2" opacity=".8"/>
 <circle cx="40" cy="69" r="5" fill="#F59A8B" opacity=".55"/><circle cx="80" cy="69" r="5" fill="#F59A8B" opacity=".55"/>
 ${eyes}${mouth}${sweat}${props}</svg>`;
