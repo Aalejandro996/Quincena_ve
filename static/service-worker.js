@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quincena-shell-v25';
+const CACHE_NAME = 'quincena-shell-v26';
 const SHELL = ['/app', '/static/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png', '/static/icons/icon.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -32,7 +32,7 @@ self.addEventListener('push', (event) => {
   }
   const title = String(payload.title || 'Quincena VE').slice(0, 120);
   const options = {
-    body: String(payload.body || 'Tienes un pago pendiente. Abre Quincena VE para revisarlo.').slice(0, 240),
+    body: String(payload.body || '¡Epa! Tienes un pago pendiente. Abre Quincena VE y échale un ojo.').slice(0, 240),
     icon: '/static/icons/icon-192.png',
     badge: '/static/icons/icon-192.png',
     tag: String(payload.tag || 'control-financiero-pago').slice(0, 160),

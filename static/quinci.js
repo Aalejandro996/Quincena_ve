@@ -39,8 +39,51 @@ ${arms}<circle cx="60" cy="62" r="40" fill="url(#qg)" stroke="#C98A00" stroke-wi
 ${eyes}${mouth}${sweat}${props}</svg>`;
 }
 
+// Consejos de Quinci: [texto para Venezuela, texto neutro para otros países]. Uno por día; «Otro consejo» pasa al siguiente.
+const QTIPS = [
+  ['Apenas cobres, aparta primero lo de los fijos: alquiler, luz, internet. Lo que queda es lo que de verdad puedes gastar, pana.', 'Apenas cobres, aparta primero lo de los gastos fijos. Lo que queda es lo que de verdad puedes gastar.'],
+  ['El cafecito, el pasaje, la empanadita… anótalos también. Sumados se comen un pedazo de la quincena.', 'El café, el pasaje, un antojo… anótalos también. Sumados se comen un pedazo de la quincena.'],
+  ['Ve al mercado con tu lista. Sin lista siempre se trae algo de más.', 'Ve al mercado con tu lista. Sin lista siempre se trae algo de más.'],
+  ['Arma tu fondito de emergencia, aunque sea poquito cada quincena. Así no te toca pedir prestado cuando salga algo.', 'Arma un fondo de emergencia, aunque sea poquito cada quincena. Así no tendrás que pedir prestado cuando salga algo.'],
+  ['Si tienes varias deudas, échale más a la de mayor interés y a las demás dales el mínimo.', 'Si tienes varias deudas, abona más a la de mayor interés y a las demás dales el mínimo.'],
+  ['Revisa tus pagos fijos: a veces seguimos pagando cosas que ya ni usamos.', 'Revisa tus pagos fijos: a veces seguimos pagando cosas que ya ni usamos.'],
+  ['No te gastes la quincena el primer día. Repártela, que la quincena es larga.', 'No gastes la quincena el primer día. Repártela, que la quincena es larga.'],
+  ['Antes de pagar en bolívares, échale un ojo a la tasa del día. Así sabes cuánto te costó de verdad en dólares.', 'Antes de pagar en moneda local, revisa el tipo de cambio del día. Así sabes cuánto te costó de verdad en dólares.'],
+  ['Compara precios entre la bodega, el abasto y el automercado: la misma harina puede variar bastante.', 'Compara precios entre tiendas: el mismo producto puede variar bastante.'],
+  ['En el pago móvil, revisa bien el teléfono, la cédula y el banco antes de confirmar.', 'Antes de transferir, revisa bien los datos de quien recibe.'],
+  ['Si alguien te promete «duplicar tus dólares», desconfía: eso es una estafa.', 'Si alguien te promete duplicar tu dinero, desconfía: eso es una estafa.'],
+  ['Si fías o prestas, anota a quién y para cuándo. Lo que no se anota, se olvida.', 'Si prestas, anota a quién y para cuándo. Lo que no se anota, se olvida.'],
+  ['Ponle presupuesto a la comida y al transporte: son los gastos que más se escapan.', 'Ponle presupuesto a la comida y al transporte: son los gastos que más se escapan.'],
+  ['Antes de comprar algo grande, espérate un día. Si mañana todavía lo quieres, ahí sí.', 'Antes de comprar algo grande, espera un día. Si mañana todavía lo quieres, adelante.'],
+];
+const isVE = () => typeof ctry !== 'function' || typeof CT === 'undefined' || ctry() === CT.VE;
+let QTIP_EXTRA = 0;
+function quinciTip() {
+  const d = new Date(), day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+  const t = QTIPS[(day + QTIP_EXTRA) % QTIPS.length];
+  return { mood: 'pensando', prop: '', text: 'Consejo: ' + (isVE() ? t[0] : t[1]), btn: ['Otro consejo', 'data-qtip="1"'] };
+}
+
+// En Venezuela Quinci habla en criollo. En otros países se queda con el texto neutro.
+const QVE = [
+  ['¡Hola! Soy Quinci', '¡Epa! Soy Quinci'],
+  ['Busquemos qué recortar.', 'Vamos a ver de dónde recortamos.'],
+  ['Armemos un plan.', 'Vamos a armar un plan, pana.'],
+  ['¡Que no te agarre desprevenido!', '¡Que no te agarre fuera de base!'],
+  ['Frenemos un poquito ahí.', '¡Pisa el freno ahí!'],
+  ['Así se controla la quincena.', '¡Así es que se controla la quincena!'],
+  ['Uy, con este gasto pasaste', '¡Epa! Con este gasto te pasaste'],
+  ['Ojo: ya usaste', 'Pendiente: ya usaste'],
+  ['¡Anotado! Así no se te escapa nada.', '¡Listo, anotado! Así no se te escapa ni un bolívar.'],
+  ['¡Anotado! Te quedan', '¡Listo, anotado! Te quedan'],
+  ['¡Vas bien!', '¡Chévere, vas bien!'],
+  ['¡Terminaste de pagar', '¡Qué nota! ¡Ya terminaste de pagar'],
+  ['¡Abono registrado!', '¡Listo el abono!'],
+];
+function qv(t) { if (!isVE()) return t; for (const [a, b] of QVE) t = t.split(a).join(b); return t; }
+
 // Qué dice Quinci ahora: el primer caso que aplique, de lo más urgente a lo más alegre.
-function quinciNow() {
+function quinciNowBase() {
   const d = S.data, cp = calcP(), c = calc(), today = ymd(new Date());
   const name = (x) => x.entity || x.description || 'tu deuda';
   if (!(d.incomeSources || []).length && !(d.expenses || []).length)
@@ -76,7 +119,14 @@ function quinciNow() {
   if (streak >= 3) return { mood: 'celebra', prop: 'confeti', text: `¡Llevas ${streak} días seguidos anotando tus gastos! Así se controla la quincena.` };
   if (!days.has(today) && new Date().getHours() >= 18) return { mood: 'pensando', prop: '', text: '¿Gastaste algo hoy? Anótalo en 2 segundos y no se te olvida.', btn: ['Anotar gasto', 'data-sheet="gasto"'] };
   if (c.debt > .005 && plan().configured && plan().months) return { mood: 'feliz', prop: '', text: `Vas en camino: si sigues el plan, terminas tus deudas en ${plan().months} ${plan().months === 1 ? 'mes' : 'meses'}.` };
-  return { mood: 'feliz', prop: '', text: cp.inc > 0 ? `¡Vas bien! Te quedan ${show(cp.free)} en este periodo.` : 'Todo en orden por aquí. ¡Sigue anotando!' };
+  return { mood: 'feliz', prop: '', calm: true, text: cp.inc > 0 ? `¡Vas bien! Te quedan ${show(cp.free)} en este periodo.` : 'Todo en orden por aquí. ¡Sigue anotando!' };
+}
+
+// Lo urgente primero; si no hay nada urgente, Quinci da un consejo (salvo racha o recordatorio de la noche).
+function quinciNow() {
+  const q = quinciNowBase();
+  const r = q.calm ? quinciTip() : q;
+  return { ...r, text: qv(r.text) };
 }
 
 function quinciHidden() { try { return localStorage.getItem('qquinci') === ymd(new Date()) } catch (_) { return false } }
@@ -93,7 +143,7 @@ function quinciPop(mood, text, prop = '', label = '') {
   const el = document.createElement('div');
   el.className = 'qpop';
   el.setAttribute('role', 'status');
-  el.innerHTML = `${quinciSvg(mood, prop, label, 64)}<div class="qbub"><span>${esc(text)}</span></div>`;
+  el.innerHTML = `${quinciSvg(mood, prop, label, 64)}<div class="qbub"><span>${esc(qv(text))}</span></div>`;
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('in'));
   setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 400); }, 4200);

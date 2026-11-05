@@ -18,8 +18,18 @@ from app import app, db, User, SharedState, PushSubscription, ReminderDelivery, 
 REMINDER_DAYS = {7, 4, 1, 0}
 
 
+def _cuando(days: int, ve: bool) -> str:
+    """Cuándo vence, dicho como se dice en Venezuela (o neutro en otros países)."""
+    if days == 0:
+        return "Vence hoy, ¡pendiente que no se te pase!" if ve else "Vence hoy."
+    if days == 1:
+        return "Vence mañana. Ve apartando los reales." if ve else "Vence mañana."
+    return f"Vence en {days} días." if ve else f"Vence en {days} día(s)."
+
+
 def eligible_events(state: dict, today: date):
     """Yield private payment reminder candidates for one user's financial state."""
+    ve = str(state.get("country") or "VE").upper() == "VE"
     for item in state.get("plannedDebtPayments", []):
         if not isinstance(item, dict) or item.get("status") != "planned":
             continue
@@ -30,8 +40,8 @@ def eligible_events(state: dict, today: date):
         if days in REMINDER_DAYS:
             label = str(item.get("entity") or "Deuda")[:80]
             description = str(item.get("description") or "Pago planificado")[:100]
-            body = f"{label}: {description}. " + ("Vence hoy." if days == 0 else f"Vence en {days} día(s).")
-            yield f"debt:{item.get('id')}", due_date.isoformat(), days, "Próximo pago planificado", body
+            body = f"{label}: {description}. " + _cuando(days, ve)
+            yield f"debt:{item.get('id')}", due_date.isoformat(), days, "¡Epa! Se acerca un pago" if ve else "Próximo pago planificado", body
 
     payments = state.get("schoolPayments", [])
     for school in state.get("schoolExpenses", []):
@@ -51,8 +61,8 @@ def eligible_events(state: dict, today: date):
             continue
         label = str(school.get("student") or "Colegio")[:80]
         description = str(school.get("description") or "Pago escolar")[:100]
-        body = f"{label}: {description}. " + ("Vence hoy." if days == 0 else f"Vence en {days} día(s).")
-        yield f"school:{school.get('id')}", due_date.isoformat(), days, "Recordatorio de pago escolar", body
+        body = f"{label}: {description}. " + _cuando(days, ve)
+        yield f"school:{school.get('id')}", due_date.isoformat(), days, "Pendiente con el pago del colegio" if ve else "Recordatorio de pago escolar", body
 
 
 def main() -> int:

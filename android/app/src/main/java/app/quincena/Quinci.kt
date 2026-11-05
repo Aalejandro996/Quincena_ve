@@ -164,7 +164,56 @@ private fun DrawScope.confetti(k: Float) {
     drawCircle(Color(0xFFCF142B), 2.5f * k, Offset(14 * k, 36 * k))
 }
 
-data class QNow(val mood: String, val prop: String, val label: String, val text: String, val btn: String? = null, val go: ((AppState) -> Unit)? = null)
+data class QNow(val mood: String, val prop: String, val label: String, val text: String, val btn: String? = null, val go: ((AppState) -> Unit)? = null,
+                val calm: Boolean = false)
+
+/** Consejos de Quinci (igual que la web): (texto para Venezuela, texto neutro). Uno por día; «Otro consejo» pasa al siguiente. */
+val QTIPS = listOf(
+    "Apenas cobres, aparta primero lo de los fijos: alquiler, luz, internet. Lo que queda es lo que de verdad puedes gastar, pana." to "Apenas cobres, aparta primero lo de los gastos fijos. Lo que queda es lo que de verdad puedes gastar.",
+    "El cafecito, el pasaje, la empanadita… anótalos también. Sumados se comen un pedazo de la quincena." to "El café, el pasaje, un antojo… anótalos también. Sumados se comen un pedazo de la quincena.",
+    "Ve al mercado con tu lista. Sin lista siempre se trae algo de más." to "Ve al mercado con tu lista. Sin lista siempre se trae algo de más.",
+    "Arma tu fondito de emergencia, aunque sea poquito cada quincena. Así no te toca pedir prestado cuando salga algo." to "Arma un fondo de emergencia, aunque sea poquito cada quincena. Así no tendrás que pedir prestado cuando salga algo.",
+    "Si tienes varias deudas, échale más a la de mayor interés y a las demás dales el mínimo." to "Si tienes varias deudas, abona más a la de mayor interés y a las demás dales el mínimo.",
+    "Revisa tus pagos fijos: a veces seguimos pagando cosas que ya ni usamos." to "Revisa tus pagos fijos: a veces seguimos pagando cosas que ya ni usamos.",
+    "No te gastes la quincena el primer día. Repártela, que la quincena es larga." to "No gastes la quincena el primer día. Repártela, que la quincena es larga.",
+    "Antes de pagar en bolívares, échale un ojo a la tasa del día. Así sabes cuánto te costó de verdad en dólares." to "Antes de pagar en moneda local, revisa el tipo de cambio del día. Así sabes cuánto te costó de verdad en dólares.",
+    "Compara precios entre la bodega, el abasto y el automercado: la misma harina puede variar bastante." to "Compara precios entre tiendas: el mismo producto puede variar bastante.",
+    "En el pago móvil, revisa bien el teléfono, la cédula y el banco antes de confirmar." to "Antes de transferir, revisa bien los datos de quien recibe.",
+    "Si alguien te promete «duplicar tus dólares», desconfía: eso es una estafa." to "Si alguien te promete duplicar tu dinero, desconfía: eso es una estafa.",
+    "Si fías o prestas, anota a quién y para cuándo. Lo que no se anota, se olvida." to "Si prestas, anota a quién y para cuándo. Lo que no se anota, se olvida.",
+    "Ponle presupuesto a la comida y al transporte: son los gastos que más se escapan." to "Ponle presupuesto a la comida y al transporte: son los gastos que más se escapan.",
+    "Antes de comprar algo grande, espérate un día. Si mañana todavía lo quieres, ahí sí." to "Antes de comprar algo grande, espera un día. Si mañana todavía lo quieres, adelante.",
+)
+
+fun quinciTip(extra: Int): QNow {
+    val t = QTIPS[((LocalDate.now().dayOfYear + extra) % QTIPS.size + QTIPS.size) % QTIPS.size]
+    return QNow("pensando", "", "", "Consejo: " + if (Loc.cur.code == "VE") t.first else t.second, "Otro consejo")
+}
+
+/** En Venezuela Quinci habla en criollo (igual que la web); en otros países se queda con el texto neutro. */
+private val QVE = listOf(
+    "¡Hola! Soy Quinci" to "¡Epa! Soy Quinci",
+    "Busquemos qué recortar." to "Vamos a ver de dónde recortamos.",
+    "Armemos un plan." to "Vamos a armar un plan, pana.",
+    "¡Que no te agarre desprevenido!" to "¡Que no te agarre fuera de base!",
+    "Frenemos un poquito ahí." to "¡Pisa el freno ahí!",
+    "Así se controla la quincena." to "¡Así es que se controla la quincena!",
+    "Uy, con este gasto pasaste" to "¡Epa! Con este gasto te pasaste",
+    "Ojo: ya usaste" to "Pendiente: ya usaste",
+    "¡Anotado! Así no se te escapa nada." to "¡Listo, anotado! Así no se te escapa ni un bolívar.",
+    "¡Anotado! Te quedan" to "¡Listo, anotado! Te quedan",
+    "¡Vas bien!" to "¡Chévere, vas bien!",
+    "¡Terminaste de pagar" to "¡Qué nota! ¡Ya terminaste de pagar",
+    "¡Abono registrado!" to "¡Listo el abono!",
+)
+fun qv(t: String): String = if (Loc.cur.code != "VE") t else QVE.fold(t) { acc, (a, b) -> acc.replace(a, b) }
+
+/** Lo urgente primero; si no hay nada urgente, Quinci da un consejo. */
+fun quinciSays(st: AppState, extra: Int): QNow {
+    val q = quinciNow(st)
+    val r = if (q.calm) quinciTip(extra) else q
+    return r.copy(text = qv(r.text))
+}
 
 /** Qué dice Quinci ahora: el primer caso que aplique, de lo más urgente a lo más alegre (igual que la web). */
 fun quinciNow(st: AppState): QNow {
@@ -217,7 +266,7 @@ fun quinciNow(st: AppState): QNow {
     val plan = debtPlan(d)
     if (debtTotals(d).remaining > .005 && plan.configured && plan.months != null)
         return QNow("feliz", "", "", "Vas en camino: si sigues el plan, terminas tus deudas en ${plan.months} ${if (plan.months == 1) "mes" else "meses"}.")
-    return QNow("feliz", "", "", if (cp.income > 0) "¡Vas bien! Te quedan ${f.show(cp.free)} en este periodo." else "Todo en orden por aquí. ¡Sigue anotando!")
+    return QNow("feliz", "", "", if (cp.income > 0) "¡Vas bien! Te quedan ${f.show(cp.free)} en este periodo." else "Todo en orden por aquí. ¡Sigue anotando!", calm = true)
 }
 
 @Composable
@@ -225,8 +274,9 @@ fun QuinciCard(st: AppState) {
     val today = LocalDate.now().toString()
     if (st.repo.pref("quinci_off") == today) return
     var hidden by remember { mutableStateOf(false) }
+    var extra by remember { mutableStateOf(0) }
     if (hidden) return
-    val q = quinciNow(st)
+    val q = quinciSays(st, extra)
     QCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             QuinciFace(q.mood, q.prop, q.label, 80.dp)
@@ -237,6 +287,7 @@ fun QuinciCard(st: AppState) {
                 }
                 Text(q.text, fontSize = 15.sp, lineHeight = 20.sp)
                 if (q.btn != null && q.go != null) Btn(q.btn, { q.go.invoke(st) }, small = true)
+                else if (q.btn == "Otro consejo") Btn("Otro consejo", { extra++ }, small = true)
             }
         }
     }
@@ -261,7 +312,7 @@ fun QuinciPopHost(st: AppState, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             QuinciFace(s.mood, s.prop, s.label, 60.dp)
-            Text(s.text, Modifier.weight(1f), fontSize = 15.sp, lineHeight = 20.sp)
+            Text(qv(s.text), Modifier.weight(1f), fontSize = 15.sp, lineHeight = 20.sp)
         }
     }
 }
