@@ -360,6 +360,47 @@ fun NavBar(st: AppState) {
     }
 }
 
+private val CUR_NAMES = mapOf("USD" to "Dólar BCV", "USDT" to "USDT (dólar paralelo)", "EUR" to "Euro BCV")
+
+/** Selector de moneda compacto: muestra la moneda actual y, al tocarlo, la lista con la tasa de cada una. */
+@Composable
+fun CurPicker(opts: List<Pair<String, String>>, value: String, d: JsonObject, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val p = pal
+    val label = opts.firstOrNull { it.first == value }?.second ?: opts.first().second
+    val local = Loc.cur.short
+    fun eq(v: String) = when (v) {
+        "USD" -> rateOf(d).takeIf { it > 0 }?.let { "1 $ = $local ${String.format(ES, "%,.2f", it)}" }
+        "USDT" -> marketRateOf(d).takeIf { it > 0 }?.let { "1 USDT = $local ${String.format(ES, "%,.2f", it)}" }
+        "EUR" -> d.num("euroRate").takeIf { it > 0 }?.let { "1 € = $local ${String.format(ES, "%,.2f", it)}" }
+        else -> "Tu moneda local"
+    } ?: ""
+    Box {
+        Row(
+            Modifier.height(40.dp).glass(CircleShape, 4.dp).clip(CircleShape).clickable { open = true }.padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(label, fontWeight = FontWeight.Bold, color = p.g)
+            Text("▾", fontSize = 11.sp, color = p.mut)
+        }
+        DropdownMenu(open, { open = false }) {
+            opts.forEach { (v, l) ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("$l · ${CUR_NAMES[v] ?: Loc.cur.plural.replaceFirstChar { it.uppercase() }}", fontWeight = if (v == value) FontWeight.Bold else FontWeight.Medium)
+                            eq(v).takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = p.mut) }
+                        }
+                    },
+                    trailingIcon = { if (v == value) Text("✓", color = p.g, fontWeight = FontWeight.Bold) },
+                    onClick = { open = false; onChange(v) },
+                    modifier = Modifier.heightIn(min = 52.dp),
+                )
+            }
+        }
+    }
+}
+
 /** Encabezado de cada pantalla: nombre, quincena actual, ocultar montos y $ / Bs. */
 @Composable
 fun Head(st: AppState) {
@@ -377,7 +418,10 @@ fun Head(st: AppState) {
             val opts = listOf("USD" to "$") + (if (ve && marketRateOf(d) > 0) listOf("USDT" to "USDT") else emptyList()) +
                 (if (ve && d.num("euroRate") > 0) listOf("EUR" to "€") else emptyList()) + listOf("BS" to Loc.cur.short)
             val cur = d.str("currency")?.takeIf { c -> opts.any { it.first == c } } ?: "USD"
-            Seg(opts, cur, st::setCurrency)
+            // Se adapta al teléfono: si la pantalla es angosta o la persona usa letra grande, una sola pastilla con la lista.
+            val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+            val narrow = cfg.screenWidthDp / cfg.fontScale.coerceAtLeast(1f) < 420
+            if (opts.size > 2 && narrow) CurPicker(opts, cur, d, st::setCurrency) else Seg(opts, cur, st::setCurrency)
         }
     }
 }

@@ -8,6 +8,21 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## [Sin publicar · Quinci da consejos, selector de moneda adaptable y avisos en criollo] — 5 nov 2026
+
+### Agregado
+- **Web y Android · Consejos de Quinci:** cuando no hay nada urgente (deudas, pagos por vencer, presupuesto), Quinci da un
+  consejo del día (fondo de emergencia, gastos hormiga, comparar precios, pago móvil seguro, estafas…). Botón «Otro consejo».
+- **Web y Android · Selector de moneda adaptable:** en el teléfono (pantalla angosta o letra grande) los 4 botones
+  ($ / USDT / € / Bs.) se cambian por una sola pastilla que abre la lista con el nombre y la tasa de cada moneda.
+  En pantallas anchas se mantienen los botones.
+
+### Cambiado
+- **Web y Android · Quinci habla en criollo** cuando el país es Venezuela («¡Epa!», «¡Chévere, vas bien!», «pendiente»,
+  «¡Que no te agarre fuera de base!»…). En otros países sigue con el texto neutro.
+- **Avisos y notificaciones** (push del servidor, avisos de la app Android y aviso por defecto del navegador) con
+  expresiones venezolanas en Venezuela; neutros en otros países.
+
 ## Código: app.py dividido en módulos (rama mejoras/dividir-app)
 - Las rutas pasan a blueprints en `routes/`: `auth.py` (entrar, salir, passkeys, registro, correo y contraseña), `cuentas.py` (dispositivos, términos, correo, clave, eliminar cuenta), `gastos.py` (estado de la quincena, importar, países y tasa), `negocio.py` (vendedores y modo vendedor), `notificaciones.py` (avisos push) y `admin.py` (panel, usuarios, cobros Plus, Binance y sugerencias).
 - `app.py` queda como núcleo: configuración, modelos, seguridad (cabeceras, CSRF, sesiones, `require_auth`), correo, tasas, datos y páginas públicas. El código de cada ruta no cambió; las URLs, los métodos, los límites de intentos y las exenciones son idénticos.

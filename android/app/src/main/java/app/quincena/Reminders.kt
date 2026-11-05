@@ -97,6 +97,8 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         }
 
         val f = Fmt(false, false, rateOf(d))
+        // En Venezuela los avisos hablan en criollo; en otros países, neutro.
+        val ve = (d.str("country") ?: "VE") == "VE"
         val today = LocalDate.now()
 
         // 1) Pagos programados y compromisos: 7, 4 y 1 día antes y el mismo día.
@@ -127,7 +129,8 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             for (it in items) {
                 if (it.days !in 0..7) continue
                 val bucket = listOf(0, 1, 4, 7).first { b -> b >= it.days }
-                val body = when (it.days) { 0 -> "Vence hoy: ${it.amount}"; 1 -> "Vence mañana: ${it.amount}"; else -> "Vence en ${it.days} días: ${it.amount}" }
+                val body = if (ve) when (it.days) { 0 -> "¡Pendiente! Vence hoy: ${it.amount}. Que no se te pase."; 1 -> "Vence mañana: ${it.amount}. Ve apartando los reales."; else -> "Vence en ${it.days} días: ${it.amount}." }
+                    else when (it.days) { 0 -> "Vence hoy: ${it.amount}"; 1 -> "Vence mañana: ${it.amount}"; else -> "Vence en ${it.days} días: ${it.amount}" }
                 once("${it.key}_$bucket", it.title, body)
             }
         }
@@ -141,9 +144,10 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             val who = r.str("person")?.takeIf { it.isNotBlank() } ?: "Alguien"
             val amount = f.orig(left, r.str("currency"))
             when {
-                days == 0 -> once("rec_${r.id}_${date}_0", "Hoy te toca cobrar", "$who te debe $amount.")
+                days == 0 -> once("rec_${r.id}_${date}_0", "Hoy te toca cobrar", if (ve) "$who te debe $amount. ¡Recuérdaselo!" else "$who te debe $amount.")
                 days == 1 -> once("rec_${r.id}_${date}_1", "Mañana te toca cobrar", "$who te debe $amount.")
-                days <= -3 -> once("rec_${r.id}_${date}_late", "Cobro atrasado", "$who te debe $amount desde el ${shortDate(date)}.")
+                days <= -3 -> once("rec_${r.id}_${date}_late", if (ve) "Ese cobro se está atrasando" else "Cobro atrasado",
+                    "$who te debe $amount desde el ${shortDate(date)}." + if (ve) " Échale un recordatorio." else "")
             }
         }
 
@@ -163,7 +167,8 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                     val key = "${base}_${if (over) 100 else 80}"
                     // Si ya pasó del 100 %, el aviso del 80 % deja de hacer falta.
                     if (over) sent.edit().putBoolean("${base}_80", true).apply()
-                    val title = if (over) "${CATS[k]}: te pasaste del presupuesto" else "${CATS[k]}: vas al ${pct.toInt()} % del presupuesto"
+                    val title = if (over) (if (ve) "¡Epa! ${CATS[k]}: te pasaste del presupuesto" else "${CATS[k]}: te pasaste del presupuesto")
+                        else (if (ve) "Pendiente: ${CATS[k]} va al ${pct.toInt()} % del presupuesto" else "${CATS[k]}: vas al ${pct.toInt()} % del presupuesto")
                     once(key, title, "Llevas ${f.show(spent[k] ?: 0.0)} de ${f.show(b)} esta quincena.", news = true)
                 }
             }

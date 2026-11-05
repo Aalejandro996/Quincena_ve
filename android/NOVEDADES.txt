@@ -1,1 +1,1 @@
-Nuevo: barra de carga y botones que muestran cuando están guardando o conectando, y pagos mixtos: divide un gasto entre pago móvil, efectivo, Zelle y más.
+Nuevo: Quinci ahora te da consejos para tu quincena y habla en criollo. El selector de moneda se adapta a tu teléfono: toca la moneda y elige $, USDT, € o Bs. con la tasa de cada una. Avisos de pagos más claros.
