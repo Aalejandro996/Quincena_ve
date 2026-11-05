@@ -166,7 +166,7 @@ private fun DrawScope.confetti(k: Float) {
 
 // «calm» va antes de «go» para que la lambda final de QNow(...) { … } siga siendo la acción del botón.
 data class QNow(val mood: String, val prop: String, val label: String, val text: String, val btn: String? = null, val calm: Boolean = false,
-                val go: ((AppState) -> Unit)? = null)
+                val more: Boolean = false, val go: ((AppState) -> Unit)? = null)
 
 /** Consejos de Quinci (igual que la web): (texto para Venezuela, texto neutro). Uno por día; «Otro consejo» pasa al siguiente. */
 val QTIPS = listOf(
@@ -212,8 +212,13 @@ fun qv(t: String): String = if (Loc.cur.code != "VE") t else QVE.fold(t) { acc, 
 /** Lo urgente primero; si no hay nada urgente, Quinci da un consejo. */
 fun quinciSays(st: AppState, extra: Int): QNow {
     val q = quinciNow(st)
-    val r = if (q.calm) quinciTip(extra) else q
-    return r.copy(text = qv(r.text))
+    if (!q.calm) return q.copy(text = qv(q.text))
+    // Nada urgente: primero lo que Quinci observa en tus datos (QuinciReglas.kt), luego los consejos generales.
+    val rules = runCatching { quinciRules(st) }.getOrDefault(emptyList())
+    val r = rules.getOrNull(extra)
+    if (r == null) return quinciTip(extra - rules.size).let { it.copy(text = qv(it.text)) }
+    quinciMarkSeen(st, r.id)
+    return QNow(r.mood, r.prop, r.label, qv(r.text), r.btn ?: "Otro consejo", more = true, go = r.go)
 }
 
 /** Qué dice Quinci ahora: el primer caso que aplique, de lo más urgente a lo más alegre (igual que la web). */
@@ -287,8 +292,12 @@ fun QuinciCard(st: AppState) {
                     Text("×", Modifier.clickable { st.repo.setPref("quinci_off", today); hidden = true }.padding(horizontal = 6.dp), color = pal.mut, fontSize = 20.sp)
                 }
                 Text(q.text, fontSize = 15.sp, lineHeight = 20.sp)
-                if (q.btn != null && q.go != null) Btn(q.btn, { q.go.invoke(st) }, small = true)
-                else if (q.btn == "Otro consejo") Btn("Otro consejo", { extra++ }, small = true)
+                if (q.btn != null && q.go != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Btn(q.btn, { q.go.invoke(st) }, small = true)
+                        if (q.more) Text("Otro consejo", Modifier.clickable { extra++ }.padding(6.dp), color = pal.g, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                } else if (q.btn == "Otro consejo") Btn("Otro consejo", { extra++ }, small = true)
             }
         }
     }

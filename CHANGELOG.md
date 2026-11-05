@@ -8,6 +8,27 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
 
 ---
 
+## [Sin publicar · Quinci observa tus datos, uso real de la app y recordatorios] — 5 nov 2026
+
+### Agregado
+- **Web y Android · 46 reglas de Quinci** (`static/quinci_reglas.js` y `QuinciReglas.kt`, misma lógica): observaciones
+  hechas con los datos de cada persona, pensadas para Venezuela. Día de cobro y víspera, cuánto toca por día hasta el
+  cobro, arranque fuerte de quincena, cierre apretado, categorías que suben o bajan frente a la quincena pasada, gastos
+  hormiga, delivery, taxis y Ridery, gasolina, salidas del fin de semana, gasto grande, comida sin presupuesto,
+  bolívares guardados, brecha BCV/USDT, a qué tasa conseguiste tus bolívares, tarjeta cerca del límite o por pagar,
+  compras en Cashea, muchas deudas, deudas sin plan, «me deben» atrasado, gastos fijos pesados, suscripciones, ingresos
+  extra, efectivo y pago móvil, Zelle y Binance sin cuenta, días sin anotar y temporadas (aguinaldos y diciembre, enero,
+  inicio de clases, Carnaval y Semana Santa, Día de las Madres). Cada regla descansa unos días después de salir para no
+  repetirse. Sin inteligencia artificial: todo se calcula en el teléfono o el navegador.
+- **Panel /admin › Uso de la app:** cuántas personas la usan de verdad (últimos 5 días), cuántas la dejaron, cuántas nunca
+  la usaron, quién tiene la app Android vieja y desde dónde entran. Lista filtrable por estado.
+- **Recordatorio para volver** (correo y aviso del navegador) a quien no la usó desde el día que se registró o lleva más de
+  5 días sin entrar; el mensaje pide actualizar si la app está vieja. Primero se revisa la lista y luego se confirma. Como
+  mucho uno cada 7 días por persona. Envío automático diario opcional en el cron con `INACTIVE_REMINDERS_AUTO=1`.
+- **Servidor:** cada cuenta guarda cuándo entró por última vez, si fue por la web o la app y la versión de la app
+  (`last_seen_at`, `last_platform`, `app_version`, `nudge_at`; se agregan solas al arrancar). También se anota cuando la
+  app vieja queda bloqueada.
+
 ## [Sin publicar · Quinci da consejos, selector de moneda adaptable y avisos en criollo] — 5 nov 2026
 
 ### Agregado

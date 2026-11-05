@@ -31,7 +31,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 10px
 th{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)}td.r,th.r{text-align:right}
 .tw{overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:18px}
 .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;background:var(--gs);color:var(--g)}
-.pill.plus{background:var(--gold);color:var(--navy)}.pill.bad{background:#FDE8E7;color:var(--bad)}.pill.mut{background:var(--line);color:var(--mut)}
+.pill.plus{background:var(--gold);color:var(--navy)}.pill.bad{background:#FDE8E7;color:var(--bad)}.pill.mut{background:var(--line);color:var(--mut)}.pill.warn{background:#FFF4E0;color:#6B3A00}
 .btn{border:0;border-radius:999px;text-decoration:none;display:inline-block;background:var(--g);color:#fff;font-weight:700;padding:9px 16px;cursor:pointer}
 .btn.o{background:none;border:1.5px solid var(--g);color:var(--g)}.btn.s{padding:5px 11px;font-size:13px}.btn.bad{background:none;border:1.5px solid var(--bad);color:var(--bad)}
 .btn:disabled{opacity:.5;cursor:default}
@@ -72,7 +72,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clea
 async function api(url,o={}){const b=document.getElementById('netbar');S.n=(S.n||0)+1;b&&b.classList.add('on');try{return await api0(url,o)}finally{S.n--;if(!S.n&&b)b.classList.remove('on')}}
 async function api0(url,o={}){const h={'Content-Type':'application/json'};if(S.csrf&&o.method&&o.method!=='GET')h['X-CSRF-Token']=S.csrf;
   const r=await fetch(url,{credentials:'same-origin',...o,headers:h});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.error||'Error ('+r.status+')');return p}
-const TABS=[['resumen','Resumen'],['sugerencias','Sugerencias'],['usuarios','Usuarios'],['cobros','Cobros Plus'],['nueva','Nueva factura'],['ajustes','Facturación']];
+const TABS=[['resumen','Resumen'],['uso','Uso de la app'],['sugerencias','Sugerencias'],['usuarios','Usuarios'],['cobros','Cobros Plus'],['nueva','Nueva factura'],['ajustes','Facturación']];
 function tabs(){$('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}${k==='sugerencias'&&S.newSug?` <span class="pill plus">${S.newSug}</span>`:''}</button>`).join('')}
 const METHODS={binance:'Binance (USDT)',pago_movil:'Pago móvil',transferencia:'Transferencia',zelle:'Zelle',efectivo_usd:'Efectivo $',efectivo_bs:'Efectivo Bs.',otro:'Otro'};
 
@@ -93,6 +93,25 @@ async resumen(){const o=await api('/api/admin/overview');S.newSug=o.suggestions.
   <div class="sec"><h2>Servicios</h2></div><div class="grid">
    <div class="card"><b>Correos (Brevo)</b><p class="small ${o.mail.configured?'':'mut'}">${o.mail.configured?'Configurado':'Sin configurar'}${o.mail.problem?' · '+esc(o.mail.problem):''}</p></div>
    <div class="card"><b>Binance</b><p class="small">${o.binance.configured?'Conectado (solo lectura)':'Sin conectar: agrega BINANCE_API_KEY y BINANCE_API_SECRET en Render.'}</p></div></div>`},
+
+async uso(){const r=await api('/api/admin/usage'),m=r.summary,f=S.uf||'todas';
+  const ST={activa:['Activa',''],inactiva:['Inactiva','warn'],nunca_uso:['Nunca la usó','bad']};
+  const k=(t,v,s='')=>`<div class="card kpi"><small>${t}</small><b>${v}</b><span>${s}</span></div>`,pct=n=>m.total?Math.round(n/m.total*100)+' %':'0 %';
+  const list=r.users.filter(u=>f==='todas'||(f==='vieja'?u.old_app:f==='toca'?u.due:u.status===f));
+  return `<div class="sec"><h2>Uso real de la app</h2><span class="mut small">Activa = la usó en los últimos ${m.active_days} días</span></div><div class="grid">
+   ${k('Personas registradas',m.total,'cuentas personales')}${k('La usan de verdad',m.activa,pct(m.activa)+' · últimos '+m.active_days+' días')}
+   ${k('La dejaron',m.inactiva,pct(m.inactiva)+' · más de '+m.active_days+' días sin entrar')}${k('Nunca la usaron',m.nunca_uso,pct(m.nunca_uso)+' · se registraron y no anotaron nada')}
+   ${k('Con la app vieja',m.old_app,m.latest_version?'no les funciona hasta actualizar':'sin APK publicado')}${k('Desde dónde',`${m.android} · ${m.web}`,'app Android · web')}</div>
+  <div class="card" style="margin-top:14px"><div class="row" style="align-items:center"><div style="flex:1"><b>Recordatorio para volver</b>
+   <p class="small mut" style="margin:4px 0 0">Les llega a quienes no la usaron desde el día que se registraron o llevan más de ${m.active_days} días sin entrar, por correo y aviso del navegador. A cada persona, como mucho una vez cada ${m.nudge_every_days} días. Si tiene la app vieja, el mensaje le pide actualizarla.</p></div>
+   <button class="btn" data-act="uso-ver" ${m.due?'':'disabled'}>${m.due?`Revisar y enviar (${m.due})`:'Nadie por ahora'}</button></div></div>
+  <div class="sec"><h2>Personas</h2><span class="sp"></span><div class="row">${[['todas','Todas'],['activa','Activas'],['inactiva','La dejaron'],['nunca_uso','Nunca la usaron'],['vieja','App vieja'],['toca','Les toca recordatorio']].map(([v,l])=>`<button class="btn ${f===v?'':'o'} s" data-act="uf" data-f="${v}">${l}</button>`).join('')}</div></div>
+  ${list.length?`<div class="tw"><table><tr><th>Cuenta</th><th>Estado</th><th>Última vez</th><th>Desde</th><th>Recordatorio</th></tr>${list.map(u=>`<tr>
+   <td><b>${esc(u.username)}</b><br><span class="small mut">${esc(u.email||'sin correo')} · se registró ${day(u.created_at)}</span></td>
+   <td><span class="pill ${ST[u.status][1]}">${ST[u.status][0]}</span>${u.old_app?' <span class="pill bad">App vieja</span>':''}</td>
+   <td>${u.last_seen?day(u.last_seen)+`<br><span class="small mut">hace ${u.days_idle} día(s)</span>`:'<span class="mut">—</span>'}</td>
+   <td>${u.platform==='android'?`App${u.app_version?' · v'+u.app_version:''}`:u.platform==='web'?'Web':'<span class="mut">—</span>'}</td>
+   <td>${u.due?'<span class="pill warn">Le toca</span>':u.nudged_at?'<span class="small mut">Enviado '+day(u.nudged_at)+'</span>':'<span class="mut">—</span>'}</td></tr>`).join('')}</table></div>`:'<div class="card mut">No hay personas en este grupo.</div>'}`},
 
 async sugerencias(){const r=await api('/api/admin/suggestions');S.newSug=r.new;tabs();const f=S.sf||'todas';
   const list=r.suggestions.filter(x=>f==='todas'||x.status===f);const K={idea:'Idea',problema:'Problema',otro:'Otro'};
@@ -193,6 +212,13 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab]
   const a=t.dataset.act,id=t.dataset.id;e.preventDefault();
   try{
   if(a==='sf'){S.sf=t.dataset.f;render();return}
+  if(a==='uf'){S.uf=t.dataset.f;render();return}
+  if(a==='uso-ver'){const r=await api('/api/admin/usage/remind',{method:'POST',body:JSON.stringify({})});
+    dialog(`<h2>Recordatorio para ${r.count} persona(s)</h2><p class="small mut">Revisa la lista antes de enviar. Les llega por correo y, si lo activaron, por aviso del navegador.</p>
+     <div class="tw" style="max-height:300px;overflow:auto"><table><tr><th>Cuenta</th><th>Motivo</th><th>Por</th></tr>${r.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${u.status==='nunca_uso'?'Nunca la usó':'Hace '+u.days_idle+' días'}${u.old_app?' · app vieja':''}</td><td>${[u.email?'correo':'',u.push?'aviso':''].filter(Boolean).join(' y ')}</td></tr>`).join('')}</table></div>
+     <div class="row" style="margin-top:12px"><button class="btn" data-act="uso-enviar">Enviar ahora</button><button class="btn o" data-act="cerrar">Cancelar</button></div>`);return}
+  if(a==='uso-enviar'){t.disabled=true;const r=await api('/api/admin/usage/remind',{method:'POST',body:JSON.stringify({confirm:true})});$('#dlg').close();
+    toast(r.mail_configured===false&&!r.pushed?'No se envió: falta configurar el correo (Brevo).':`Listo: ${r.sent} de ${r.count} recibieron el recordatorio (${r.mailed} por correo, ${r.pushed} por aviso).`);render();return}
   if(a==='factura'){S.form={username:t.dataset.u};S.tab='nueva';await render();fillFromUser(t.dataset.u);return}
   if(a==='plan'){const d=prompt(`Plus para ${t.dataset.u}: ¿cuántos días? (0 = quitar el Plus)`,'30');if(d===null)return;const n=parseInt(d,10)||0;
     await api('/api/users/'+id,{method:'PATCH',body:JSON.stringify(n>0?{plan:'plus',days:n}:{plan:'free'})});toast(n>0?'Plus activado.':'Volvió al plan gratis.');render();return}
