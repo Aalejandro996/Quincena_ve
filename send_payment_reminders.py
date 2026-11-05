@@ -121,5 +121,17 @@ def main() -> int:
     return 0
 
 
+def inactive_reminders() -> None:
+    """Recordatorio diario a quienes no usan la app. Apagado por defecto: se enciende con INACTIVE_REMINDERS_AUTO=1."""
+    if os.getenv("INACTIVE_REMINDERS_AUTO", "0") != "1":
+        return
+    import usage
+    with app.app_context():
+        r = usage.send_reminders(dry_run=False)
+    print(f"Recordatorios por no usar la app: {r.get('sent', 0)} de {r.get('count', 0)}.")
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    code = main()
+    inactive_reminders()
+    raise SystemExit(code)

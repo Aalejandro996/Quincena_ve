@@ -1,1 +1,1 @@
-Nuevo: Quinci ahora te da consejos para tu quincena y habla en criollo. El selector de moneda se adapta a tu teléfono: toca la moneda y elige $, USDT, € o Bs. con la tasa de cada una. Avisos de pagos más claros.
+Nuevo: Quinci ahora mira tus gastos y te da observaciones hechas para ti: el día de cobro, los gastos hormiga, el delivery, Cashea, la tasa, tus tarjetas y más. Toca «Otro consejo» para ver la siguiente.

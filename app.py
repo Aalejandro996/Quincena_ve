@@ -184,6 +184,11 @@ class User(db.Model):
     plan = db.Column(db.String(16), nullable=True)  # None/"free" o "plus" (Negocio Plus, lo activa un administrador)
     plan_until = db.Column(db.DateTime(timezone=True), nullable=True)  # vence el Plus; None = sin vencimiento
     owner_id = db.Column(db.Integer, nullable=True, index=True)  # cuenta de vendedor: id del dueño del negocio
+    # Uso real de la app (lo anota note_activity en cada petición con sesión): cuándo entró, desde dónde y con qué versión.
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_platform = db.Column(db.String(16), nullable=True)  # web | android
+    app_version = db.Column(db.Integer, nullable=True)  # versionCode de la app Android (None = solo web)
+    nudge_at = db.Column(db.DateTime(timezone=True), nullable=True)  # último recordatorio por no usar la app
 
 
 class ProductLicense(db.Model):
@@ -292,7 +297,9 @@ def migrate_user_email() -> None:
         return {c["name"] for c in sqlalchemy_inspect(db.engine).get_columns("user")}
 
     for name, ddl in (("email", "VARCHAR(254)"), ("email_verified_at", "TIMESTAMP WITH TIME ZONE"), ("signup_source", "VARCHAR(120)"),
-                      ("plan", "VARCHAR(16)"), ("plan_until", "TIMESTAMP WITH TIME ZONE"), ("owner_id", "INTEGER")):
+                      ("plan", "VARCHAR(16)"), ("plan_until", "TIMESTAMP WITH TIME ZONE"), ("owner_id", "INTEGER"),
+                      ("last_seen_at", "TIMESTAMP WITH TIME ZONE"), ("last_platform", "VARCHAR(16)"), ("app_version", "INTEGER"),
+                      ("nudge_at", "TIMESTAMP WITH TIME ZONE")):
         if name in columns():
             continue
         try:
@@ -603,9 +610,26 @@ def require_auth(admin: bool = False, allow_password_change: bool = False):
             if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not getattr(g, "via_token", False) and not csrf_ok():
                 return jsonify(error="Token de seguridad vencido. Actualiza la página e inicia sesión nuevamente."), 403
             g.user = user
+            note_activity(user)
             return fn(*args, **kwargs)
         return wrapped
     return decorate
+
+
+def note_activity(user: "User") -> None:
+    """Anota cuándo usó la app, si fue desde la web o la app Android, y su versión. Escribe como mucho cada 10 minutos."""
+    raw = request.headers.get("X-App-Version")
+    android = raw is not None or "okhttp" in request.headers.get("User-Agent", "").lower()
+    platform = "android" if android else "web"
+    version = (int(raw) if raw and raw.strip().isdigit() else 0) if android else user.app_version
+    now = datetime.now(timezone.utc)
+    if user.last_seen_at and now - _aware(user.last_seen_at) < timedelta(minutes=10) and user.last_platform == platform and user.app_version == version:
+        return
+    try:
+        user.last_seen_at, user.last_platform, user.app_version = now, platform, version
+        db.session.commit()
+    except Exception:
+        db.session.rollback()  # anotar el uso nunca debe tumbar la petición
 
 
 def _rate_or_none(value):
@@ -1431,6 +1455,12 @@ def require_current_android_app():
     minimum = android_min_version_code()
     if installed >= minimum:
         return None
+    try:  # se anota que esta persona tiene la app vieja, para verla en el panel (Uso de la app)
+        user = current_user()
+        if user is not None:
+            note_activity(user)
+    except Exception:
+        db.session.rollback()
     info = android_version()
     return jsonify(error=f"Hay una versión nueva de Quincena VE ({info['version']}). Actualízala para seguir usándola: toca Actualizar en Inicio.",
                    code="update_required", minVersionCode=minimum, version=info["version"],

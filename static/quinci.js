@@ -58,9 +58,10 @@ const QTIPS = [
 ];
 const isVE = () => typeof ctry !== 'function' || typeof CT === 'undefined' || ctry() === CT.VE;
 let QTIP_EXTRA = 0;
-function quinciTip() {
+function quinciTip() { return quinciTipAt(QTIP_EXTRA); }
+function quinciTipAt(extra) {
   const d = new Date(), day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
-  const t = QTIPS[(day + QTIP_EXTRA) % QTIPS.length];
+  const t = QTIPS[((day + Math.max(0, extra)) % QTIPS.length + QTIPS.length) % QTIPS.length];
   return { mood: 'pensando', prop: '', text: 'Consejo: ' + (isVE() ? t[0] : t[1]), btn: ['Otro consejo', 'data-qtip="1"'] };
 }
 
@@ -125,7 +126,11 @@ function quinciNowBase() {
 // Lo urgente primero; si no hay nada urgente, Quinci da un consejo (salvo racha o recordatorio de la noche).
 function quinciNow() {
   const q = quinciNowBase();
-  const r = q.calm ? quinciTip() : q;
+  let r = q;
+  if (q.calm) {  // nada urgente: primero lo que Quinci observa en tus datos (quinci_reglas.js), luego los consejos generales
+    const n = typeof QR !== 'undefined' ? QR.candidates().length : 0;
+    r = (n && QTIP_EXTRA < n && quinciRule(QTIP_EXTRA)) || quinciTipAt(QTIP_EXTRA - n);
+  }
   return { ...r, text: qv(r.text) };
 }
 
@@ -134,7 +139,7 @@ function quinciHidden() { try { return localStorage.getItem('qquinci') === ymd(n
 function quinciCard() {
   if (quinciHidden()) return '';
   const q = quinciNow();
-  return `<div class="card qcard"><button class="link qx" data-quincix="1" aria-label="Ocultar a Quinci por hoy">×</button><div class="qrow">${quinciSvg(q.mood, q.prop, q.label, 84)}<div class="qbub"><b>Quinci</b><span>${esc(q.text)}</span>${q.btn ? `<button class="btn s" ${q.btn[1]}>${q.btn[0]}</button>` : ''}</div></div></div>`;
+  return `<div class="card qcard"><button class="link qx" data-quincix="1" aria-label="Ocultar a Quinci por hoy">×</button><div class="qrow">${quinciSvg(q.mood, q.prop, q.label, 84)}<div class="qbub"><b>Quinci</b><span>${esc(q.text)}</span>${q.btn ? `<button class="btn s" ${q.btn[1]}>${q.btn[0]}</button>` : ''}${q.more && q.btn && !q.btn[1].includes('data-qtip') ? '<button class="link qmore" data-qtip="1">Otro consejo</button>' : ''}</div></div></div>`;
 }
 
 // Aparece un momento abajo con una reacción (tras anotar un gasto, abonar a una deuda, etc.).

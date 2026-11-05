@@ -206,6 +206,24 @@ def admin_overview():
         suggestions={"new": Suggestion.query.filter_by(status="nueva").count(), "total": Suggestion.query.count()})
 
 
+@bp.get("/api/admin/usage")
+@require_auth(admin=True)
+def admin_usage():
+    """Cuántas personas usan la app de verdad, cuáles no, y quién tiene la app vieja."""
+    import usage
+    return jsonify(usage.classify())
+
+
+@bp.post("/api/admin/usage/remind")
+@require_auth(admin=True)
+@limiter.limit("10 per hour")
+def admin_usage_remind():
+    """Recordatorio a quienes no usan la app. Primero se pide con dry_run (vista previa) y luego se confirma."""
+    import usage
+    body = request.get_json(silent=True) or {}
+    return jsonify(usage.send_reminders(dry_run=body.get("confirm") is not True, admin_id=g.user.id))
+
+
 @bp.get("/api/admin/users")
 @require_auth(admin=True)
 def admin_users():
