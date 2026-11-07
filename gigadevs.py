@@ -70,3 +70,13 @@ def checkout(**datos) -> dict:
 
 def orden(ref: str) -> dict:
     return peticion("GET", f"/sync/v1/{PRODUCTO}/ordenes/{urllib.parse.quote(ref)}")
+
+
+def legal_pendientes(usuario: str, perfil: str = "usuario") -> list:
+    """Documentos legales vigentes de Quincena VE (aprobados por la abogada de Gigadevs) que esta persona aún no aceptó."""
+    q = urllib.parse.urlencode({"usuario": usuario, "perfil": perfil})
+    return peticion("GET", f"/sync/v1/{PRODUCTO}/legal/pendientes?{q}").get("pendientes") or []
+
+
+def legal_aceptar(**datos) -> list:
+    return peticion("POST", f"/sync/v1/{PRODUCTO}/legal/aceptar", datos).get("aceptaciones") or []

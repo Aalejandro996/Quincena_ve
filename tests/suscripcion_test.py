@@ -51,13 +51,24 @@ def token(sujeto, dias=30):
 class Consola:
     """Simula la consola de Gigadevs: verifica la firma de cada petición como el servidor de licencias."""
     def __init__(self):
-        self.ordenes, self.vistos = {}, []
+        self.ordenes, self.vistos, self.aceptados = {}, [], set()
 
     def __call__(self, metodo, ruta, cuerpo, cab):
         p = dict(x.split("=", 1) for x in cab["X-Gigadevs-Firma"].split(","))
         base = "\n".join([p["t"], p["n"], metodo, ruta, hashlib.sha256(cuerpo).hexdigest()])
         if not hmac.compare_digest(hmac.new(SECRETO.encode(), base.encode(), hashlib.sha256).hexdigest(), p["f"]): return 401, b'{"message":"No autorizado"}'
         self.vistos.append((metodo, ruta, json.loads(cuerpo) if cuerpo else None))
+        if ruta.startswith("/sync/v1/control_financiero/legal/pendientes"):
+            perfil = "responsable" if "perfil=responsable" in ruta else "usuario"
+            tipos = ("contrato", "terminos", "privacidad") if perfil == "responsable" else ("terminos", "privacidad")
+            docs = [{"id": i, "tipo": t, "titulo": f"Documento {t}", "version": 1, "huella": "a" * 64,
+                     "documento": {"secciones": [{"titulo": "Uno", "parrafos": ["Texto."]}], "abogado": {"nombre": "María Pérez", "inpreabogado": "123456"}}}
+                    for i, t in enumerate(tipos, 1) if (i, t) not in self.aceptados]
+            return 200, json.dumps({"pendientes": docs}).encode()
+        if ruta == "/sync/v1/control_financiero/legal/aceptar":
+            d = json.loads(cuerpo); tipos = {1: "terminos", 2: "privacidad"} if len(d["documentos"]) == 2 else {1: "contrato", 2: "terminos", 3: "privacidad"}
+            for i in d["documentos"]: self.aceptados.add((i, tipos.get(i)))
+            return 201, json.dumps({"aceptaciones": d["documentos"]}).encode()
         if ruta == "/sync/v1/control_financiero/planes":
             return 200, json.dumps({"planes": [{"codigo": "plus", "nombre": "Negocio Plus", "precios": {"mensual": "5.00", "anual": "50.00"}}],
                                     "metodos": {"bolivares": [{"codigo": "pago_movil", "nombre": "Pago Móvil"}], "dolares": [{"codigo": "zelle", "nombre": "Zelle"}]}}).encode()
@@ -104,6 +115,20 @@ with A.app.app_context():
     A.db.session.commit()
 st, j = u.req("GET", "/api/subscription")
 check("planes y formas de pago desde la consola", j["plans"][0]["precios"]["anual"] == "50.00" and j["methods"]["dolares"][0]["codigo"] == "zelle", j)
+st, j = u.req("GET", "/api/legal/pending")
+check("al ingresar se piden términos y privacidad aprobados por la abogada", [d["kind"] for d in j["pending"]] == ["terminos", "privacidad"]
+      and j["pending"][0]["lawyer"]["inpre"] == "123456", j)
+st, j = u.req("POST", "/api/legal/accept", {"ids": [1]})
+check("hay que marcar cada documento", st == 400, j)
+st, j = u.req("POST", "/api/legal/accept", {"ids": [1, 2]})
+check("se aceptan y se registran en la consola", st == 200 and j["accepted"] == 2 and consola.vistos[-1][2]["sujeto"] == "ana@correo.test", j)
+with A.app.app_context():
+    check("copia local de la evidencia", A.LegalAcceptance.query.count() == 2 and A.LegalAcceptance.query.first().sha256 == "a" * 64)
+st, j = u.req("POST", "/api/subscription/checkout", {"plan": "plus", "period": "mensual", "method": "pago_movil", "document": "v-12345678-0"})
+check("antes de pagar se pide el contrato de suscripción", st == 409 and j.get("code") == "legal_required", j)
+st, j = u.req("GET", "/api/legal/pending?perfil=responsable")
+st, j = u.req("POST", "/api/legal/accept", {"ids": [d["id"] for d in j["pending"]], "perfil": "responsable"})
+check("acepta el contrato", st == 200, j)
 st, j = u.req("POST", "/api/subscription/checkout", {"plan": "plus", "period": "mensual", "method": "pago_movil", "document": "v-12345678-0"})
 check("checkout devuelve el enlace de Ávila Pay", st == 200 and j["url"].startswith("https://comercio.avilapay.com/pay/"), j)
 _, _, enviado = consola.vistos[-1]
