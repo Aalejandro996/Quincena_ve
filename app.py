@@ -191,8 +191,18 @@ class User(db.Model):
     nudge_at = db.Column(db.DateTime(timezone=True), nullable=True)  # último recordatorio por no usar la app
 
 
+class SubscriptionOrder(db.Model):
+    """Pago de la suscripción (Negocio Plus) iniciado desde la app; lo cobra y lo factura la consola de Gigadevs con Ávila Pay."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    ref = db.Column(db.String(20), nullable=False, unique=True)
+    plan = db.Column(db.String(32), nullable=False)
+    status = db.Column(db.String(12), nullable=False, default="Pendiente")   # Pendiente | Pagada | Anulada
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class ProductLicense(db.Model):
-    """Licencia individual que activó el titular de esta cuenta."""
+    """Suscripción firmada (Consola Maestra de Gigadevs) vigente para esta cuenta."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     token = db.Column(db.Text, nullable=False)
@@ -560,6 +570,23 @@ def verify_product_license(token: str, user: User) -> tuple[dict | None, str | N
         return None, "license_verification_unavailable"
     except Exception:
         return None, "invalid_license"
+
+
+def apply_subscription(user: User, token: str) -> tuple[dict | None, str | None]:
+    """Guarda la suscripción firmada y activa Negocio Plus hasta su vencimiento (o lo extiende). No hace commit."""
+    claims, code = verify_product_license(token, user)
+    if not claims:
+        return None, code
+    expires = datetime.fromtimestamp(int(claims["exp"]), timezone.utc)
+    row = ProductLicense.query.filter_by(user_id=user.id).first()
+    if row is None:
+        db.session.add(ProductLicense(user_id=user.id, token=token, expires_at=expires))
+    else:
+        row.token, row.expires_at = token, expires
+    current = user.plan_until.replace(tzinfo=timezone.utc) if user.plan_until is not None and user.plan_until.tzinfo is None else user.plan_until
+    if user.plan != "plus" or (current is not None and current < expires):
+        user.plan, user.plan_until = "plus", expires
+    return claims, None
 
 
 def license_required() -> bool:
@@ -1529,18 +1556,12 @@ def activate_product_license():
     token = str((request.get_json(silent=True) or {}).get("token", "")).strip()
     if not token or len(token) > 32768:
         return jsonify(error="Pega el archivo de licencia completo.", code="invalid_license_format"), 400
-    claims, code = verify_product_license(token, g.user)
+    claims, code = apply_subscription(g.user, token)
     if not claims:
-        return jsonify(error="La licencia no es válida para esta cuenta verificada.", code=code), 400
+        return jsonify(error="La suscripción no es válida para esta cuenta verificada.", code=code), 400
     expires = datetime.fromtimestamp(int(claims["exp"]), timezone.utc)
-    row = ProductLicense.query.filter_by(user_id=g.user.id).first()
-    if row is None:
-        row = ProductLicense(user_id=g.user.id, token=token, expires_at=expires)
-        db.session.add(row)
-    else:
-        row.token, row.expires_at = token, expires
     db.session.commit()
-    audit("product_license_activated", f"Control financiero hasta {expires.date().isoformat()}", g.user.id)
+    audit("product_license_activated", f"Suscripción de Quincena VE hasta {expires.date().isoformat()}", g.user.id)
     return jsonify(ok=True, active=True, expires_at=expires.isoformat())
 
 
@@ -2327,6 +2348,8 @@ from routes.notificaciones import bp as _notificaciones_bp  # noqa: E402
 app.register_blueprint(_notificaciones_bp)
 from routes.admin import bp as _admin_bp  # noqa: E402
 app.register_blueprint(_admin_bp)
+from routes.suscripcion import bp as _suscripcion_bp  # noqa: E402
+app.register_blueprint(_suscripcion_bp)
 
 with app.app_context():
     db.create_all()

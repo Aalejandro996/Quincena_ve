@@ -129,7 +129,7 @@ try:
 
         print("== Negocio Plus ==")
         page.click("[data-biz='sub:productos']"); page.wait_for_timeout(200)
-        check("sin Plus, Productos muestra cómo pedirlo", "Pedir Negocio Plus por WhatsApp" in text(page))
+        check("sin Plus, Productos muestra cómo suscribirse", "Suscribirme a Negocio Plus" in text(page))
         actx = b.new_context(base_url=f"http://127.0.0.1:{PORT}", timezone_id="America/Caracas", locale="es-VE")
         actx.add_init_script("try{localStorage.setItem('qck','1');localStorage.setItem('qapk','1')}catch(e){}")
         ap = actx.new_page(); ap.on("pageerror", lambda e: errors.append(str(e))); ap.route("**/api/rate*", fake_rate)
