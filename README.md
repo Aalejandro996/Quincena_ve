@@ -94,3 +94,15 @@ Formato: **Agregado** (nuevo), **Cambiado** (mejoras), **Corregido** (errores), 
   `MainActivity.kt`).
 - **Android:** el modo de pruebas vuelve a usar el servidor local de la Mac (`10.0.2.2:5001`).
 - **Android:** los errores de inicio de sesión dicen la causa exacta.
+
+
+## Suscripción (Negocio Plus) con Ávila Pay
+
+La suscripción de Quincena VE la administra la Consola Maestra de Gigadevs (Contax → Quincena VE): allí se crean los planes y
+sus precios. En la app, **Más → Suscripción · Negocio Plus** muestra esos planes; la persona elige plan y forma de pago (bolívares a
+tasa BCV, o Zelle/tarjeta si están habilitados) y paga en la página segura de Ávila Pay. Al volver, o con el aviso de Ávila Pay, la
+consola confirma el pago, crea o renueva la suscripción, emite la factura y la envía por correo; la app recibe la suscripción
+firmada y activa Negocio Plus hasta su vencimiento. El administrador puede seguir activando Plus a mano.
+
+Variables: `GIGADEVS_SYNC_SECRET` (igual a `SYNC_SECRET_CONTROL_FINANCIERO` del servidor de licencias) y `GIGADEVS_SYNC_URL`
+(por defecto `https://erp-licencias.onrender.com`). Sin el secreto, la tarjeta ofrece pedir el Plus por WhatsApp como antes.
