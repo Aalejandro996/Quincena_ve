@@ -150,5 +150,21 @@ GD.TRANSPORTE = lambda *a: (_ for _ in ()).throw(GD.ErrorGigadevs("El servicio d
 st, j = u.req("POST", "/api/subscription/checkout", {"plan": "plus", "period": "mensual", "method": "pago_movil"})
 check("si la consola no responde se avisa sin romper", st == 502 and "no respondió" in j.get("error", ""), j)
 
+def firmado(estado, cuerpo, cab, alterar=False):
+    n = dict(x.split("=", 1) for x in cab["X-Gigadevs-Firma"].split(","))["n"]; t = str(int(time.time()))
+    f = hmac.new(SECRETO.encode(), "\n".join([t, n, str(estado), hashlib.sha256(cuerpo).hexdigest()]).encode(), hashlib.sha256).hexdigest()
+    return estado, (cuerpo + b" " if alterar else cuerpo), {"X-Gigadevs-Respuesta": f"t={t},f={f}"}
+
+
+GD.TRANSPORTE = lambda m, r, c, h: firmado(*consola(m, r, c, h), h)
+st, j = u.req("GET", "/api/subscription")
+check("respuesta firmada por la consola: se acepta", st == 200 and j["plans"], j)
+GD.TRANSPORTE = lambda m, r, c, h: firmado(*consola(m, r, c, h), h, alterar=True)
+try: GD.planes(); check("respuesta alterada se rechaza", False)
+except GD.ErrorGigadevs as e: check("respuesta alterada se rechaza", "firma" in str(e), e)
+GD.TRANSPORTE = lambda m, r, c, h: (*consola(m, r, c, h), {})
+try: GD.planes(); check("respuesta sin firma se rechaza", False)
+except GD.ErrorGigadevs as e: check("respuesta sin firma se rechaza", "firma" in str(e), e)
+
 print(f"\n{ok} ok, {fail} fallas")
 sys.exit(1 if fail else 0)
