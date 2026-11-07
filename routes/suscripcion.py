@@ -59,6 +59,11 @@ def pagar():
     doc = str(d.get("document") or "").strip().upper().replace(" ", "")[:15]
     if doc and not RE_DOC.match(doc): return jsonify(error="Escribe tu RIF o cédula como V-12345678-9, o déjalo vacío."), 400
     if doc and re.fullmatch(r"[VEJPG]-?\d{8}-?\d", doc) is None: doc = ""        # la factura necesita RIF completo; sin él, se factura después
+    try:   # el contrato de suscripción vigente (aprobado por la abogada) se acepta antes de pagar
+        if any(p["tipo"] == "contrato" for p in GD.legal_pendientes(u.username, "responsable")):
+            return jsonify(error="Antes de pagar, acepta el contrato de suscripción.", code="legal_required"), 409
+    except GD.ErrorGigadevs:
+        pass
     datos = {"referencia": u.email, "nombre": u.username, "correo": u.email, "plan": plan, "periodo": periodo, "metodo": metodo,
              "retorno": f"{_origen()}/?suscripcion=1"}
     if doc: datos["documento"] = doc

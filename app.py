@@ -191,6 +191,20 @@ class User(db.Model):
     nudge_at = db.Column(db.DateTime(timezone=True), nullable=True)  # último recordatorio por no usar la app
 
 
+class LegalAcceptance(db.Model):
+    """Aceptación de un documento legal de Quincena VE (versión aprobada por la abogada de Gigadevs). Copia local de la evidencia
+    que también queda registrada en la Consola Maestra de Gigadevs."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = db.Column(db.Integer, nullable=False)
+    kind = db.Column(db.String(20), nullable=False)        # contrato | terminos | privacidad
+    version = db.Column(db.Integer, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False)
+    ip = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(300), nullable=True)
+    accepted_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class SubscriptionOrder(db.Model):
     """Pago de la suscripción (Negocio Plus) iniciado desde la app; lo cobra y lo factura la consola de Gigadevs con Ávila Pay."""
     id = db.Column(db.Integer, primary_key=True)
@@ -2350,6 +2364,8 @@ from routes.admin import bp as _admin_bp  # noqa: E402
 app.register_blueprint(_admin_bp)
 from routes.suscripcion import bp as _suscripcion_bp  # noqa: E402
 app.register_blueprint(_suscripcion_bp)
+from routes.legal import bp as _legal_bp  # noqa: E402
+app.register_blueprint(_legal_bp)
 
 with app.app_context():
     db.create_all()
